@@ -3,7 +3,7 @@ import type { Track } from '../bridge/contract';
 import { app, likedIds } from '../core/store';
 import { buildAiPrompt, parseAiTracks, summarizeTaste } from '../logic/ai';
 import { eraOf } from '../logic/features';
-import { songKey } from '../logic/normalize';
+import { songKeys } from '../logic/normalize';
 import type { RecoSource } from '../logic/recommend';
 import { findTrack } from './catalog';
 import { isDisliked } from './dislikes';
@@ -48,14 +48,14 @@ export async function aiSuggest(source: RecoSource, count: number, opts: Suggest
   const suggestions = parseAiTracks(await call('aiChat', { messages, temperature: 0.9, tier: opts.tier ?? 'fast' }));
   suggestions.forEach((s) => asked.push(`${s.artist} — ${s.title}`));
   const liked = likedIds.peek();
-  const likedKeys = new Set(signals.likes.map((l) => songKey(l.track)));
+  const likedKeys = new Set(signals.likes.flatMap((l) => songKeys(l.track)));
   const picks: AiPick[] = [];
   let next = 0;
   const worker = async () => {
     while (next < suggestions.length) {
       const s = suggestions[next++];
       const track = await findTrack(s).catch(() => null);
-      if (track && !liked.has(track.id) && !likedKeys.has(songKey(track)) && !isDisliked(track) && !picks.some((p) => p.track.id === track.id)) picks.push({ track, reason: s.reason });
+      if (track && !liked.has(track.id) && !songKeys(track).some((k) => likedKeys.has(k)) && !isDisliked(track) && !picks.some((p) => p.track.id === track.id)) picks.push({ track, reason: s.reason });
     }
   };
   // The searches are independent network calls: run several at once.

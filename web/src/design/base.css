@@ -120,6 +120,7 @@ time {
   padding: 0 var(--gutter);
   scrollbar-width: none;
   scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--gutter);
 }
 
 .scroll-x::-webkit-scrollbar {

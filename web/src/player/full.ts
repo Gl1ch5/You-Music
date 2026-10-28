@@ -6,18 +6,18 @@ import { currentTrack, livePosition, player } from '../core/store';
 import { guard, slots } from '../mods/registry';
 import { mutedGlow } from '../theme/engine';
 import { artFor } from '../services/art';
-import { related } from '../services/catalog';
 import { download, removeDownload } from '../services/library';
-import { expectLoading, next, playTrackWave, playTracks, previous, seek, togglePlay } from '../services/playback';
+import { expectLoading, next, playTrackWave, previous, seek, togglePlay } from '../services/playback';
 import { linkArtist, refreshArtistLinks } from '../ui/artistLink';
 import { dislikes, isDisliked, toggleDislike } from '../services/dislikes';
 import type { Lyrics } from '../bridge/contract';
 import { onBack } from '../ui/back';
-import { button, emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
+import { haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, trackRow, cover } from '../ui/components';
 import { applyDynamicBackground } from '../ui/hero';
 import { openSheet } from '../ui/sheet';
 import { openTrackMenu } from '../ui/trackMenu';
 import { busy } from '../core/busy';
+import { normalizeTrack } from '../logic/normalize';
 import { toast } from '../ui/toast';
 import { app } from '../core/store';
 
@@ -36,11 +36,8 @@ export function mountFullPlayer(): HTMLElement {
   const dim = h('div.dyn-dim');
   artBox = cover([], '', 'note');
   const glow = h('div.glow');
-  const lyricLine = h('div.art-lyric', { attrs: { 'aria-hidden': 'true' }, onclick: (e: MouseEvent) => {
-    e.stopPropagation();
-    openLyrics();
-  } });
-  const art = h('div.player-art', null, glow, h('div.art-frame', null, artBox, lyricLine));
+  const lyrics = lyricsPanel(scope);
+  const art = h('div.player-art', null, glow, h('div.art-frame', null, artBox, lyrics.el));
   const title = h('div.player-title.ellipsis');
   const artist = h('div.player-artist.ellipsis');
   linkArtist(artist, () => currentTrack.peek(), () => closePlayer());
@@ -61,52 +58,77 @@ export function mountFullPlayer(): HTMLElement {
     haptic();
   });
   scope.effect(() => {
-    repeatBtn.classList.toggle('accent', player.repeat.value !== 'off');
-    shuffleBtn.classList.toggle('accent', player.shuffle.value);
+    repeatBtn.classList.toggle('on', player.repeat.value !== 'off');
+    shuffleBtn.classList.toggle('on', player.shuffle.value);
   });
 
-  const action = (glyph: SVGElement, label: string | HTMLElement, onclick: () => void) =>
-    h('button.action', { onclick, attrs: { 'aria-label': typeof label === 'string' ? label : 'Скачать' } }, glyph, typeof label === 'string' ? h('span', null, label) : label);
-  const dlLabel = h('span');
+  // Layout after Yandex Music: queue in the header; download and menu beside the title; dislike / prev / play / next / like;
+  // three wide toggles (repeat, lyrics, shuffle) and the "Волна по треку" banner at the bottom.
+  const dlBadge = h('span.action-badge');
+  const dlBtn = h('button.btn-icon.dl', { onclick: toggleDownload, attrs: { 'aria-label': 'Скачать' } }, reactiveIcon(scope, () => (app.downloads.value.get(currentTrack.value?.id ?? '')?.status === 'done' ? 'downloaded' : 'download')), dlBadge);
   scope.effect(() => {
-    const d = app.downloads.value.get(currentTrack.value?.id ?? '');
-    dlLabel.textContent = d?.status === 'done' ? 'Скачано' : d ? `${Math.round(d.progress * 100)}%` : 'Скачать';
+    const t = currentTrack.value;
+    const d = app.downloads.value.get(t?.id ?? '');
+    const running = !!d && d.status !== 'done' && d.status !== 'failed';
+    dlBadge.textContent = running ? `${Math.round(d.progress * 100)}` : '';
+    dlBadge.hidden = !running;
+    dlBtn.classList.toggle('accent', d?.status === 'done');
+    dlBtn.setAttribute('aria-label', d?.status === 'done' ? 'Скачано' : 'Скачать');
+    dlBtn.hidden = t?.source !== 'yt';
   });
-  const fixedActions = [
-    action(icon('queue'), 'Очередь', openQueue),
-    action(icon('lyrics'), 'Текст', openLyrics),
-    action(icon('similar'), 'Похожие', openSimilar),
-    action(reactiveIcon(scope, () => (app.downloads.value.get(currentTrack.value?.id ?? '')?.status === 'done' ? 'downloaded' : 'download')), dlLabel, toggleDownload),
-  ];
-  const actions = h('div.player-actions');
+  const pill = (glyph: SVGElement, label: string, onclick: () => void) =>
+    h('button.player-pill', { onclick, attrs: { 'aria-label': label, title: label } }, glyph);
+  repeatBtn.className = 'player-pill';
+  shuffleBtn.className = 'player-pill';
+  const lyricsBtn = lyrics.toggle(pill(icon('lyrics'), 'Текст', () => lyrics.set(!lyrics.on(), art)));
+  const pills = h('div.player-pills');
   scope.effect(() => {
-    const mods = slots.playerButtons.value.map((b) => action(icon(b.icon), b.label, () => guard(b.modId, b.onClick)(currentTrack.peek())));
-    replaceChildren(actions, ...fixedActions, ...mods);
+    const mods = slots.playerButtons.value.map((b) => pill(icon(b.icon), b.label, () => guard(b.modId, b.onClick)(currentTrack.peek())));
+    replaceChildren(pills, repeatBtn, lyricsBtn, shuffleBtn, ...mods);
   });
-
-  const head = h('div.player-head', null, iconButton('chevron-down', 'Свернуть', () => closePlayer()), context, iconButton('more', 'Действия', () => {
+  const waveTitle = h('div.wave-banner-title.ellipsis');
+  const wave = h('button.wave-banner', { onclick: () => {
     const t = currentTrack.peek();
-    if (t) openTrackMenu(t);
-  }));
+    if (t) void playTrackWave(t);
+  } }, h('div.wave-banner-label', null, 'Волна по треку'), h('div.wave-banner-row', null, icon('play', 'sm'), waveTitle));
+  scope.effect(() => {
+    const t = currentTrack.value;
+    const ctx = player.context.value;
+    waveTitle.textContent = t ? normalizeTrack(t).title : '';
+    // Hidden for own files and while this very wave plays.
+    wave.hidden = !t || t.source !== 'yt' || (ctx?.kind === 'wave' && ctx.title === `Волна по «${t.title}»`);
+  });
+
+  const head = h('div.player-head', null, iconButton('chevron-down', 'Свернуть', () => closePlayer()), context, iconButton('queue', 'Очередь', openQueue));
 
   const body = h(
     'div.player-body',
     null,
     head,
     art,
-    h('div.player-meta', null, h('div', { style: { flex: '1', minWidth: '0' } }, title, artist), dislikeButton(scope), likeButton(scope, () => currentTrack.value)),
+    h(
+      'div.player-meta',
+      null,
+      h('div', { style: { flex: '1', minWidth: '0' } }, title, artist),
+      dlBtn,
+      iconButton('more', 'Действия', () => {
+        const t = currentTrack.peek();
+        if (t) openTrackMenu(t);
+      }),
+    ),
     progress.el,
     h('div.times', null, progress.elapsed, progress.remaining),
     h(
       'div.player-controls',
       null,
-      shuffleBtn,
+      dislikeButton(scope),
       iconButton('prev', 'Предыдущий', () => previous(), 'big on'),
       playButton(scope, { size: 'lg', playing: () => player.wantsPlay.value, loading: () => player.buffering.value && player.wantsPlay.value, onToggle: togglePlay }),
       iconButton('next', 'Следующий', () => next(), 'big on'),
-      repeatBtn,
+      likeButton(scope, () => currentTrack.value),
     ),
-    actions,
+    pills,
+    wave,
   );
 
   root = h('div.player', { attrs: { 'aria-hidden': 'true' } }, bg, dim, body);
@@ -121,7 +143,8 @@ export function mountFullPlayer(): HTMLElement {
     const key = t ? `${t.id}|${t.title}|${t.artist}|${urls[0] ?? ''}` : '';
     if (key === shownKey) return;
     shownKey = key;
-    title.textContent = t?.title ?? '';
+    // Old likes may keep raw YouTube titles ("Sia - Snowman [Official Video]"): show them cleaned.
+    title.textContent = t ? normalizeTrack(t).title : '';
     refreshArtistLinks(artist);
     if (!t) return;
     setCoverUrls(artBox, urls);
@@ -133,7 +156,6 @@ export function mountFullPlayer(): HTMLElement {
     });
   });
   scope.effect(() => art.classList.toggle('paused', !player.wantsPlay.value));
-  syncedLine(scope, lyricLine);
 
   attachDragToClose(head, art);
   return root;
@@ -175,44 +197,114 @@ function lyricsOf(t: Track): Promise<Lyrics> {
   return p;
 }
 
-/** The current line of synced lyrics over the bottom of the cover; tap opens the full text. */
-function syncedLine(scope: Scope, box: HTMLElement): void {
-  let lines: LrcLine[] = [];
+/**
+ * Lyrics in place of the cover: the "Текст" action swaps the cover for the full text (synced lines follow the
+ * song, a tap on a line seeks). The mode stays on from track to track until turned off.
+ */
+function lyricsPanel(scope: Scope) {
+  const scroller = h('div.art-lyrics-scroll');
+  const translateBtn = iconButton('translate', 'Перевести на русский', () => void translate());
+  translateBtn.hidden = true;
+  const el = h('div.art-lyrics', { attrs: { 'aria-hidden': 'true' } }, scroller, translateBtn);
+  let on = false;
   let forId = '';
+  let lines: LrcLine[] = [];
+  let lineEls: HTMLElement[] = [];
+  let texts: string[] = [];
   let active = -2;
-  let front = h('p');
-  let back = h('p');
-  box.append(front, back);
+  let translated = false;
+  let button: HTMLElement | null = null;
+
+  const translate = async () => {
+    if (translated) return;
+    translated = true;
+    translateBtn.classList.add('accent');
+    try {
+      const res = await busy(call('translate', { lines: texts, to: 'ru' }));
+      res.lines.forEach((line, i) => {
+        if (lineEls[i] && line && line !== texts[i]) lineEls[i].append(h('span.lyric-tr', null, line));
+      });
+    } catch (e) {
+      translated = false;
+      translateBtn.classList.remove('accent');
+      toast(`Не удалось перевести: ${(e as Error).message}`, { icon: 'alert' });
+    }
+  };
+  /** Russian text needs no translation: offer it only when most of the letters are not Cyrillic. */
+  const offerTranslation = (list: string[]) => {
+    texts = list;
+    const letters = list.join('').replace(/[^\p{L}]/gu, '');
+    const cyr = letters.replace(/[^а-яё]/gi, '').length;
+    translateBtn.hidden = letters.length < 20 || cyr / letters.length > 0.5;
+  };
+  const message = (title: string, text: string) => replaceChildren(scroller, h('div.art-lyrics-empty', null, icon('lyrics'), h('div', null, title), h('div.small.muted', null, text)));
+
+  const load = (t: Track) => {
+    forId = t.id;
+    lines = [];
+    lineEls = [];
+    active = -2;
+    translated = false;
+    translateBtn.hidden = true;
+    translateBtn.classList.remove('accent');
+    scroller.scrollTop = 0;
+    replaceChildren(scroller, h('div.lyrics-skeleton', null, [70, 55, 80, 45, 65].map((w) => h('i', { style: { width: `${w}%` } }))));
+    lyricsOf(t)
+      .then((lyr) => {
+        if (forId !== t.id) return;
+        if (lyr.synced) {
+          lines = parseLrc(lyr.synced);
+          lineEls = lines.map((l) => h('p', { onclick: () => seek(l.ms) }, l.text));
+          offerTranslation(lines.map((l) => (l.text === '♪' ? '' : l.text)));
+          replaceChildren(scroller, h('div.lyrics.synced', null, lineEls));
+        } else if (lyr.plain) {
+          const plain = lyr.plain.split('\n');
+          lineEls = plain.map((l) => h('p', null, l || ' '));
+          offerTranslation(plain);
+          replaceChildren(scroller, h('div.lyrics.plain', null, lineEls));
+        } else {
+          message('Текста нет', 'Для этого трека текст не найден.');
+        }
+      })
+      .catch(() => forId === t.id && message('Текст недоступен', 'Нужна сеть, чтобы загрузить текст.'));
+  };
+
   scope.effect(() => {
     const open = player.fullOpen.value;
     const t = currentTrack.value;
-    if (!open || !t || t.id === forId) return;
-    forId = t.id;
-    lines = [];
-    active = -2;
-    box.classList.remove('on');
-    if (t.source === 'local' && !t.artist) return;
-    lyricsOf(t)
-      .then((l) => {
-        if (currentTrack.peek()?.id !== t.id || !l.synced) return;
-        lines = parseLrc(l.synced);
-        box.classList.add('on');
-      })
-      .catch(() => undefined);
+    if (!open || !on || !t || t.id === forId) return;
+    load(t);
   });
   onFrame(scope, () => {
-    if (!lines.length || !player.fullOpen.peek()) return;
+    if (!on || !lines.length || !player.fullOpen.peek()) return;
     const pos = livePosition();
     let idx = -1;
     for (let i = 0; i < lines.length && lines[i].ms <= pos + 200; i++) idx = i;
     if (idx === active) return;
+    lineEls[active]?.classList.remove('active');
+    lineEls[idx]?.classList.add('active');
     active = idx;
-    const text = idx >= 0 ? lines[idx].text : '';
-    [front, back] = [back, front];
-    front.textContent = text === '♪' ? '' : text;
-    back.classList.remove('in');
-    front.classList.add('in');
+    const line = lineEls[idx];
+    if (line) scroller.scrollTo({ top: line.offsetTop - scroller.clientHeight / 2 + line.offsetHeight / 2, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   });
+
+  return {
+    el,
+    on: () => on,
+    toggle(btn: HTMLElement) {
+      button = btn;
+      return btn;
+    },
+    set(value: boolean, art: HTMLElement) {
+      on = value;
+      art.classList.toggle('lyrics-on', on);
+      el.setAttribute('aria-hidden', String(!on));
+      button?.classList.toggle('on', on);
+      haptic('light');
+      const t = currentTrack.peek();
+      if (on && t && t.id !== forId) load(t);
+    },
+  };
 }
 
 function toggleDownload(): void {
@@ -406,93 +498,4 @@ function parseLrc(lrc: string): LrcLine[] {
   return out;
 }
 
-function openLyrics(): void {
-  const t = currentTrack.peek();
-  if (!t) return;
-  const scope = new Scope();
-  const body = h('div', null, skeletonRows(4));
-  const translateBtn = iconButton('translate', 'Перевести на русский', () => void translate());
-  translateBtn.hidden = true;
-  let texts: string[] = [];
-  let lineEls: HTMLElement[] = [];
-  let translated = false;
-  const translate = async () => {
-    if (translated) return;
-    translated = true;
-    translateBtn.classList.add('accent');
-    try {
-      const res = await busy(call('translate', { lines: texts, to: 'ru' }));
-      res.lines.forEach((line, i) => {
-        if (lineEls[i] && line && line !== texts[i]) lineEls[i].append(h('span.lyric-tr', null, line));
-      });
-    } catch (e) {
-      translated = false;
-      translateBtn.classList.remove('accent');
-      toast(`Не удалось перевести: ${(e as Error).message}`, { icon: 'alert' });
-    }
-  };
-  /** Russian text needs no translation: offer it only when most of the letters are not Cyrillic. */
-  const offerTranslation = (lines: string[], els: HTMLElement[]) => {
-    texts = lines;
-    lineEls = els;
-    const letters = lines.join('').replace(/[^\p{L}]/gu, '');
-    const cyr = letters.replace(/[^а-яё]/gi, '').length;
-    translateBtn.hidden = letters.length < 20 || cyr / letters.length > 0.5;
-  };
-  openSheet({ header: [trackCover(t, 'sm'), h('div.item-main', null, h('div.row-title.ellipsis', null, t.title), h('div.row-sub', null, 'Текст песни')), translateBtn], content: body, onClose: () => scope.dispose() });
-  lyricsOf(t)
-    .then((lyr) => {
-      if (lyr.synced) {
-        const lines = parseLrc(lyr.synced);
-        const els = lines.map((l) => h('p', { onclick: () => seek(l.ms) }, l.text));
-        offerTranslation(lines.map((l) => (l.text === '♪' ? '' : l.text)), els);
-        replaceChildren(body, h('div.lyrics', null, els));
-        let active = -1;
-        onFrame(scope, () => {
-          if (currentTrack.peek()?.id !== t.id) return;
-          const pos = livePosition();
-          let idx = -1;
-          for (let i = 0; i < lines.length && lines[i].ms <= pos + 200; i++) idx = i;
-          if (idx === active) return;
-          els[active]?.classList.remove('active');
-          els[idx]?.classList.add('active');
-          els[idx]?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-          active = idx;
-        });
-      } else if (lyr.plain) {
-        const lines = lyr.plain.split('\n');
-        const els = lines.map((l) => h('p', null, l || ' '));
-        offerTranslation(lines, els);
-        replaceChildren(body, h('div.lyrics.plain', null, els));
-      } else {
-        replaceChildren(body, emptyState('lyrics', 'Текста нет', 'Для этого трека текст не найден.'));
-      }
-    })
-    .catch(() => replaceChildren(body, emptyState('offline', 'Текст недоступен', 'Нужна сеть, чтобы загрузить текст.')));
-}
-
-function openSimilar(): void {
-  const t = currentTrack.peek();
-  if (!t) return;
-  const body = h('div', null, skeletonRows(6));
-  const close = openSheet({ header: h('div.h2', null, 'Похожие'), content: body });
-  const waveBtn = t.source === 'yt'
-    ? h('div.pad', { style: { marginBottom: 'var(--s-2)' } }, button('Волна по этому треку', () => {
-        close();
-        playTrackWave(t);
-      }, { cls: 'primary block', icon: 'wave' }))
-    : null;
-  related(t)
-    .then((tracks) => {
-      const list = tracks.filter((x) => x.durationMs < 15 * 60_000);
-      replaceChildren(
-        body,
-        waveBtn,
-        list.length
-          ? list.map((x: Track, i) => trackRow(x, { onPlay: () => playTracks(list, i, { kind: 'list', title: `Похоже на «${t.title}»` }), onMore: () => openTrackMenu(x) }))
-          : emptyState('similar', 'Ничего похожего', t.source === 'local' ? 'Для своих файлов похожие не ищутся.' : undefined),
-      );
-    })
-    .catch(() => replaceChildren(body, emptyState('offline', 'Нужна сеть')));
-}
 

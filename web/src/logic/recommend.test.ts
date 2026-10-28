@@ -58,6 +58,13 @@ describe('scoring and filters', () => {
     // The same song in another version is not offered again in this session.
     expect(selectTracks([{ track: t('song-live', 'Band', 'Song (Live)'), score: 1 }], profile, session, 10)).toEqual([]);
   });
+
+  it('drops re-uploads credited to other channels', () => {
+    const session = newSession();
+    const scored = [t('orig', 'Сплин', 'Белые ночи'), t('reup', 'Rock Lyrics', 'Сплин - Белые ночи (Текст песни)'), t('reup2', 'Edits', 'Белые ночи | slowed')]
+      .map((track, i) => ({ track, score: 10 - i }));
+    expect(selectTracks(scored, profile, session, 10).map((x) => x.id)).toEqual(['orig']);
+  });
 });
 
 describe('limitArtistRuns', () => {

@@ -138,6 +138,53 @@
   flex: 1;
 }
 
+/* Header of simple collection pages: same rhythm everywhere. */
+.page-intro {
+  padding: var(--s-2) var(--gutter) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.page-sub {
+  min-height: var(--lh-small);
+}
+
+.page-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+}
+
+.page-actions .btn {
+  justify-content: center;
+}
+
+.day-head {
+  padding: var(--s-4) var(--gutter) var(--s-1);
+  color: var(--text-3);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.tile.wide {
+  grid-column: 1 / -1;
+}
+
+.card-grid.playlists {
+  padding-bottom: var(--s-6);
+}
+
+.new-cover {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--text-2);
+}
+
 /* ───────── Bottom navigation ───────── */
 .tabbar {
   position: fixed;
@@ -338,6 +385,9 @@
 .chip {
   height: 36px;
   padding: 0 var(--s-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
   border-radius: var(--r-pill);
   border: 1px solid var(--line);
   color: var(--text-2);
@@ -714,7 +764,7 @@
   margin: -8px 0 0 -8px;
   border-radius: 50%;
   background: var(--accent);
-  /* `scale`, not `transform`: the position is an inline translateX. Always visible so it is easy to grab. */
+  /* `scale` and an inline `translate` (not `transform`): the two compose without scaling the offset. Always visible so it is easy to grab. */
   scale: 0.75;
   transition: scale var(--t-base) var(--ease);
   pointer-events: none;
@@ -911,7 +961,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: calc(var(--safe-top) + var(--s-1)) var(--gutter) calc(var(--safe-bottom) + var(--s-3));
+  padding: calc(var(--safe-top) + var(--s-1)) var(--gutter) calc(var(--safe-bottom) + var(--s-6));
   min-height: 0;
 }
 
@@ -929,17 +979,18 @@
   font-weight: 500;
 }
 
+/* The cover sits right under the header; the controls follow it and the action row is pinned to the bottom. */
 .player-art {
   position: relative;
-  flex: 1;
+  flex: 0 1 auto;
   display: grid;
   place-items: center;
   min-height: 0;
-  margin: var(--s-4) 0;
+  margin: var(--s-6) 0;
 }
 
 .player-art .cover {
-  width: min(100%, 52vh);
+  width: min(84%, 44vh);
   aspect-ratio: 1;
   height: auto;
   border-radius: var(--r-card);
@@ -984,7 +1035,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--s-3) 0 var(--s-5);
+  margin: var(--s-2) 0 var(--s-4);
 }
 
 .player-controls .btn-icon.big .icon {
@@ -1001,31 +1052,89 @@
   margin-inline: var(--s-3);
 }
 
-.player-actions {
-  display: flex;
-  justify-content: space-around;
-  gap: var(--s-1);
+/* Repeat / lyrics / shuffle: three wide toggles, outlined when on (as in Yandex Music). */
+.player-pills {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--s-4);
+  margin: var(--s-2) var(--s-2) 0;
 }
 
-.action {
-  flex: 1;
-  min-width: 0;
+.player-pill {
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border: 1.5px solid transparent;
+  color: var(--text-2);
+  transition: transform var(--t-press) var(--ease), opacity var(--t-base) var(--ease);
+}
+
+.player-pill.on {
+  background: transparent;
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.player-pill:active {
+  transform: scale(0.96);
+}
+
+.wave-banner {
+  margin-top: auto;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s-1);
-  padding: var(--s-2) 0;
-  border-radius: var(--r-card);
-  color: var(--text-2);
-  font-size: var(--fs-tiny);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
+  gap: 2px;
   transition: transform var(--t-press) var(--ease);
 }
 
-.action:active {
-  transform: scale(0.94);
+.player-pills + .wave-banner {
+  margin-top: var(--s-5);
 }
+
+.wave-banner:active {
+  transform: scale(0.98);
+}
+
+.wave-banner-label {
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+
+.wave-banner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  max-width: 100%;
+  font-weight: 700;
+  font-size: var(--fs-section);
+}
+
+.btn-icon.dl {
+  position: relative;
+}
+
+.action-badge {
+  position: absolute;
+  right: 2px;
+  bottom: 4px;
+  min-width: 20px;
+  padding: 0 3px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 
 .flying-cover {
   position: fixed;
@@ -1386,24 +1495,243 @@ input[type='color']::-webkit-color-swatch {
   transform: scale(0.96);
 }
 
-.stream-row {
+.filter-pill.big {
+  height: 40px;
+  padding: 0 var(--s-4) 0 var(--s-3);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.filter-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--s-1);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-tiny);
+  font-weight: 600;
+  display: inline-grid;
+  place-items: center;
+}
+
+/* Home tabs: "Для вас | Чарт | Подборки". */
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--s-1);
   margin: 0 var(--gutter) var(--s-4);
-  padding: var(--s-2) var(--s-3) var(--s-2) var(--s-2);
+  padding: var(--s-1);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.segment {
+  height: 36px;
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-weight: 500;
+  transition: transform var(--t-press) var(--ease), opacity var(--t-base) var(--ease);
+}
+
+.segment:active {
+  transform: scale(0.96);
+}
+
+.segment.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.pane {
+  animation: pane-in var(--t-open) var(--ease) both;
+}
+
+@keyframes pane-in {
+  from { opacity: 0; transform: translateY(var(--shift)); }
+}
+
+.pane-head {
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  border-radius: var(--r-card);
+  padding: 0 var(--gutter) var(--s-3);
+}
+
+/* Recommendations hero: at least half of the screen, an orb slowly breathing behind the play button. */
+.reco-hero {
+  position: relative;
+  min-height: max(50vh, 360px);
+  margin: 0 var(--gutter) var(--s-6);
+  border-radius: calc(var(--r-card) * 1.5);
   background: var(--surface);
   border: 1px solid var(--line);
-  transition: transform var(--t-press) var(--ease);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
 }
 
-.stream-row .filter-pill {
-  background: var(--surface-2);
+.reco-orb {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: grid;
+  place-items: center;
 }
 
-.stream-row:active:not(:has(.filter-pill:active)) {
-  transform: scale(0.98);
+.reco-orb i {
+  grid-area: 1 / 1;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow) 0%, transparent 68%);
+  opacity: 0.55;
+  animation: orb 9s var(--ease) infinite alternate;
+}
+
+.reco-orb .b2 {
+  width: 55%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  opacity: 0.18;
+  animation-duration: 7s;
+  animation-delay: -3s;
+}
+
+.reco-orb .b3 {
+  width: 90%;
+  opacity: 0.3;
+  animation-duration: 12s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes orb {
+  0% { transform: translate(-12%, -8%) scale(0.9); }
+  50% { transform: translate(10%, 6%) scale(1.1); }
+  100% { transform: translate(-4%, 12%) scale(0.95); }
+}
+
+.reco-hero.on .reco-orb i {
+  animation-duration: 3s;
+}
+
+.reco-hero.on .reco-orb .b2 {
+  opacity: 0.3;
+}
+
+:root[data-motion='reduced'] .reco-orb i {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reco-orb i { animation: none; }
+}
+
+.reco-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-5);
+  text-align: center;
+  max-width: 100%;
+}
+
+.reco-center .play-btn {
+  margin-bottom: var(--s-4);
+  scale: 1.3;
+}
+
+.reco-title {
+  font-size: var(--fs-title);
+  line-height: var(--lh-title);
+  font-weight: 700;
+  letter-spacing: var(--tracking-title);
+}
+
+.reco-sub {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  max-width: 100%;
+  margin-bottom: var(--s-3);
+}
+
+/* Filters sheet. */
+.filters-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  padding-bottom: var(--s-4);
+}
+
+.filters-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.filters-group > .small,
+.filters-title {
+  padding: 0 var(--gutter);
+}
+
+.filters-title {
+  font-weight: 600;
+}
+
+.chips.wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+  gap: var(--s-2);
+}
+
+.filters-sheet > .btn {
+  margin: 0 var(--gutter);
+}
+
+/* Chart pane: positions beside rows. */
+.chart-item {
+  display: flex;
+  align-items: center;
+  padding-left: var(--gutter);
+}
+
+.chart-item > .row {
+  flex: 1;
+  min-width: 0;
+  padding-left: var(--s-2);
+}
+
+.chart-pos {
+  width: 28px;
+  flex: none;
+  text-align: center;
+  font-weight: 700;
+  font-size: var(--fs-section);
+  color: var(--text-3);
+}
+
+.chart-pos[data-top='true'] {
+  color: var(--text);
+}
+
+/* Personal mixes. */
+.mix-cover {
+  position: relative;
+}
+
+.mix-label {
+  position: absolute;
+  left: var(--s-2);
+  bottom: var(--s-2);
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-tiny);
+  font-weight: 600;
 }
 
 .card-grid {
@@ -1812,15 +2140,10 @@ input[type='color']::-webkit-color-swatch {
 .icon-pick.active::after { opacity:1; }
 .icon-note { padding:0 var(--gutter) var(--s-6); }
 
-/* Filter chips under the stream row. */
-.reco-filters {
-  margin: var(--s-2) 0 var(--s-3);
-}
-
 /* The cover and the synced lyric line over its bottom edge. */
 .art-frame {
   position: relative;
-  width: min(100%, 52vh);
+  width: min(84%, 44vh);
   aspect-ratio: 1;
 }
 
@@ -1828,46 +2151,112 @@ input[type='color']::-webkit-color-swatch {
   width: 100%;
 }
 
-.art-lyric {
+/* Lyrics in place of the cover ("Текст" in the player). */
+.art-lyrics {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: grid;
-  padding: var(--s-6) var(--s-4) var(--s-4);
-  border-radius: 0 0 var(--r-card) var(--r-card);
-  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg) 78%, transparent));
+  inset: 0;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--t-open) var(--ease);
-}
-
-.art-lyric.on {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.player-art.paused .art-lyric {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.art-lyric p {
-  grid-area: 1 / 1;
-  margin: 0;
-  font-size: var(--fs-track);
-  line-height: 1.35;
-  font-weight: 600;
-  text-align: center;
-  color: var(--text);
-  opacity: 0;
-  transform: translateY(8px);
+  transform: scale(0.96);
   transition: opacity var(--t-open) var(--ease), transform var(--t-open) var(--ease);
 }
 
-.art-lyric p.in {
+.player-art.lyrics-on .art-lyrics {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.player-art.lyrics-on .cover,
+.player-art.lyrics-on.paused .cover {
+  transform: none;
+  opacity: 0.35;
+}
+
+.player-art .art-frame .cover {
+  transition: transform var(--t-open) var(--ease), opacity var(--t-open) var(--ease);
+}
+
+.art-lyrics-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18%, #000 82%, transparent 100%);
+}
+
+.art-lyrics-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.art-lyrics .lyrics {
+  padding: 34% var(--s-4);
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.art-lyrics .lyrics p {
+  margin: 0 0 var(--s-3);
+  transform-origin: center;
+  transition: color var(--t-base) var(--ease), opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease);
+}
+
+.art-lyrics .lyrics.synced p {
+  opacity: 0.5;
+  transform: scale(0.96);
+}
+
+.art-lyrics .lyrics.synced p.active {
   opacity: 1;
   transform: none;
+}
+
+.art-lyrics .lyrics.plain {
+  padding-top: var(--s-8);
+}
+
+.art-lyrics > .btn-icon {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+}
+
+.art-lyrics-empty {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s-2);
+  padding: var(--s-5);
+  text-align: center;
+  font-weight: 600;
+}
+
+.art-lyrics-empty .icon {
+  width: 32px;
+  height: 32px;
+  color: var(--text-3);
+}
+
+.lyrics-skeleton {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-4);
+  padding: 30% var(--s-5);
+}
+
+.lyrics-skeleton i {
+  display: block;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  animation: pulse 1.2s var(--ease) infinite alternate;
 }
 
 .lyric-tr {

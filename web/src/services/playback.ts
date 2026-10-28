@@ -5,7 +5,7 @@ import { Wave, type RecoSource } from '../logic/recommend';
 import { hooks, runHooks } from '../mods/registry';
 import { toast } from '../ui/toast';
 import { describeFilters } from '../logic/filters';
-import { songKey } from '../logic/normalize';
+import { songKeys } from '../logic/normalize';
 import { aiSuggest } from './ai';
 import { dislikes } from './dislikes';
 import { rememberWave, type SavedWave } from './waves';
@@ -204,12 +204,12 @@ function dedupeAgainstQueue(tracks: Track[], upToCurrent = false): Track[] {
   const queue = player.queue.peek();
   const keep = upToCurrent ? queue.slice(0, player.index.peek() + 1) : queue;
   const ids = new Set(keep.map((t) => t.id));
-  const keys = new Set(keep.map(songKey));
+  const keys = new Set(keep.flatMap(songKeys));
   return tracks.filter((t) => {
-    const k = songKey(t);
-    if (ids.has(t.id) || keys.has(k)) return false;
+    const own = songKeys(t);
+    if (ids.has(t.id) || own.some((k) => keys.has(k))) return false;
     ids.add(t.id);
-    keys.add(k);
+    own.forEach((k) => keys.add(k));
     return true;
   });
 }

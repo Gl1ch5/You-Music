@@ -482,8 +482,7 @@ async function onTgMessage(m) {
   if ((audio.file_size ?? 0) > 20 * 1024 * 1024) return reply(chat, 'Файл больше 20 МБ — Telegram не отдаёт ботам такие файлы.');
   const id = randomBytes(15).toString('base64url');
   const ext = EXT[audio.mime_type] ?? (audio.file_name?.match(/\.(\w{2,4})$/)?.[1]?.toLowerCase() ?? 'mp3');
-  const fileName = (audio.file_name ?? '').replace(/\.\w{2,4}$/, '');
-  const [nameArtist, nameTitle] = fileName.includes(' - ') ? fileName.split(' - ', 2) : ['', fileName];
+  const named = cleanFileTrack(audio.title || audio.file_name || '', audio.performer || '');
   try {
     await tgDownload(audio.file_id, tgPath(userId, `${id}.${ext}`));
     let cover = null;
@@ -491,8 +490,8 @@ async function onTgMessage(m) {
     if (thumb) cover = await tgDownload(thumb.file_id, tgPath(userId, `${id}.jpg`)).then(() => `${id}.jpg`, () => null);
     const track = {
       id, uniq: audio.file_unique_id,
-      title: audio.title || nameTitle || 'Без названия',
-      artist: audio.performer || nameArtist || '',
+      title: named.title,
+      artist: named.artist,
       durationMs: (audio.duration ?? 0) * 1000,
       size: audio.file_size ?? 0, mime: audio.mime_type ?? 'audio/mpeg',
       file: `${id}.${ext}`, cover, at: Date.now(),
@@ -504,6 +503,29 @@ async function onTgMessage(m) {
     console.error('tg import failed', e.message);
     reply(chat, 'Не получилось сохранить файл, попробуйте ещё раз.');
   }
+}
+
+const SITE_RE = /[([{]?\s*(?:https?:\/\/)?(?:www\.)?[\w-]+(?:\.[\w-]+)*\.(?:ru|com|net|fm|org|me|su|info|cc|io|to|top|club|pro|online|xyz|biz|ws|tv|by|ua|kz|site|music|mobi)(?:\/\S*)?\s*[)\]}]?/gi;
+const FILE_NOISE_RE = /[([{]?\s*(?:\d{2,3}\s*kbps|mp3|flac|m4a|ogg|скачать|бесплатно|free\s+download|@[\w.]+)\s*[)\]}]?/gi;
+
+/** Same cleaning as web/src/logic/match.ts cleanFileTrack: tags often hold "01._Artist_-_Song_(site.ru).mp3". */
+function cleanFileTrack(rawTitle, rawArtist) {
+  const tidy = (s) => s
+    .replace(/\.(?:mp3|m4a|flac|ogg|opus|wav|aac)$/i, '')
+    .replace(/_+/g, ' ').replace(/%20/g, ' ')
+    .replace(SITE_RE, ' ').replace(FILE_NOISE_RE, ' ')
+    .replace(/[([{]\s*[)\]}]/g, ' ').replace(/\s{2,}/g, ' ')
+    .replace(/^[\s|\-–—:.,]+|[\s|\-–—:,]+$/g, '').trim();
+  let title = tidy(rawTitle).replace(/^\d{1,3}(?:[.)]\s*|\s+[-–—]\s+)/, '');
+  let artist = tidy(rawArtist);
+  const parts = title.split(/\s+[-–—]\s+/);
+  if (parts.length >= 2) {
+    const head = parts[0].trim();
+    if (!artist) { artist = head; title = parts.slice(1).join(' - '); }
+    else if (head.toLowerCase() === artist.toLowerCase()) title = parts.slice(1).join(' - ');
+  }
+  if (/^(?:unknown|неизвестен|неизвестный|various artists?|va)$/i.test(artist)) artist = '';
+  return { title: title || 'Без названия', artist };
 }
 
 async function tgLoop() {

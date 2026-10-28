@@ -50,7 +50,7 @@ export function collectionRow(c: Collection): HTMLElement {
   );
 }
 
-function collectionCard(c: Collection): HTMLElement {
+export function collectionCard(c: Collection): HTMLElement {
   return h(
     'div.card',
     { onclick: () => navigate('remote', { url: c.url, title: c.title }) },

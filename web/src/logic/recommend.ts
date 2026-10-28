@@ -1,7 +1,7 @@
 import type { HistoryEntry, Like, Track } from '../bridge/contract';
 import { averageVibe, eraOf, eraPenalty, vibeBonus, type Era, type Vibe } from './features';
 import { filterScore, type RecoFilter } from './filters';
-import { artistKey, songKey } from './normalize';
+import { artistKey, songKeys } from './normalize';
 
 /**
  * Recommendations v1.
@@ -16,7 +16,7 @@ import { artistKey, songKey } from './normalize';
 
 export interface Dislike {
   id: string;
-  /** songKey: every upload of the song. */
+  /** songKeys: every upload of the song. */
   key: string;
   artist: string;
   at: number;
@@ -102,9 +102,9 @@ export function buildProfile({ likes, history, now, dislikes = [] }: RecoSignals
   const recent = history.filter((h, i) => i < RECENT_COUNT || now - h.playedAt < RECENT_WINDOW);
   return {
     likedIds: new Set(likes.map((l) => l.track.id)),
-    likedKeys: new Set(likes.map((l) => songKey(l.track))),
+    likedKeys: new Set(likes.flatMap((l) => songKeys(l.track))),
     recentIds: new Set(recent.map((h) => h.track.id)),
-    recentKeys: new Set(recent.map((h) => songKey(h.track))),
+    recentKeys: new Set(recent.flatMap((h) => songKeys(h.track))),
     artistScore,
     artistSkip,
     skippedIds,
@@ -188,16 +188,17 @@ export const newSession = (): Session => ({ seenIds: new Set(), seenKeys: new Se
 export function selectTracks(scored: Scored[], profile: Profile, session: Session, count: number): Track[] {
   const eligible = scored
     .filter(({ track }) => {
-      const key = songKey(track);
+      const keys = songKeys(track);
+      const known = (set: Set<string>) => keys.some((k) => set.has(k));
       return (
         !profile.likedIds.has(track.id) &&
-        !profile.likedKeys.has(key) &&
+        !known(profile.likedKeys) &&
         !profile.recentIds.has(track.id) &&
-        !profile.recentKeys.has(key) &&
+        !known(profile.recentKeys) &&
         !profile.blockedIds.has(track.id) &&
-        !profile.blockedKeys.has(key) &&
+        !known(profile.blockedKeys) &&
         !session.seenIds.has(track.id) &&
-        !session.seenKeys.has(key) &&
+        !known(session.seenKeys) &&
         track.durationMs < 15 * 60_000
       );
     })
@@ -208,15 +209,15 @@ export function selectTracks(scored: Scored[], profile: Profile, session: Sessio
   const keys = new Set<string>();
   for (const { track } of eligible) {
     if (picked.length >= count) break;
-    const key = songKey(track);
-    if (keys.has(key)) continue;
-    keys.add(key);
+    const own = songKeys(track);
+    if (own.some((k) => keys.has(k))) continue;
+    own.forEach((k) => keys.add(k));
     picked.push(track);
   }
   const arranged = limitArtistRuns(picked, 2);
   arranged.forEach((t) => {
     session.seenIds.add(t.id);
-    session.seenKeys.add(songKey(t));
+    songKeys(t).forEach((k) => session.seenKeys.add(k));
   });
   return arranged;
 }
@@ -329,12 +330,12 @@ export class Wave {
     this.profile = buildProfile(this.signalsCache);
     for (const t of this.options.seen ?? []) {
       this.session.seenIds.add(t.id);
-      this.session.seenKeys.add(songKey(t));
+      songKeys(t).forEach((k) => this.session.seenKeys.add(k));
     }
     if (this.seed) {
       this.seedQueue = [{ track: this.seed, liked: true }];
       this.session.seenIds.add(this.seed.id);
-      this.session.seenKeys.add(songKey(this.seed));
+      songKeys(this.seed).forEach((k) => this.session.seenKeys.add(k));
     } else if (this.options.seeds?.length) {
       // A playlist wave: its songs are the taste, shuffled so every start differs; they are not replayed.
       const pool = [...this.options.seeds];
@@ -345,7 +346,7 @@ export class Wave {
       this.seedQueue = pool.map((track) => ({ track, liked: true }));
       pool.forEach((t) => {
         this.session.seenIds.add(t.id);
-        this.session.seenKeys.add(songKey(t));
+        songKeys(t).forEach((k) => this.session.seenKeys.add(k));
       });
     } else {
       this.seedQueue = pickSeeds(this.signalsCache, 12, this.rng);

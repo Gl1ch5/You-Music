@@ -12,8 +12,8 @@ import { downloadLikes, notDownloaded } from '../services/library';
 import { cover, iconButton, sectionHead, trackRow } from '../ui/components';
 import { openTrackMenu } from '../ui/trackMenu';
 
-function tile(iconName: string, title: string, sub: string, onclick: () => void): HTMLElement {
-  return h('div.tile', { onclick }, icon(iconName), h('div.tile-title', null, title), h('div.small.muted', null, sub));
+function tile(iconName: string, title: string, sub: string, onclick: () => void, wide = false): HTMLElement {
+  return h(`div.tile${wide ? '.wide' : ''}`, { onclick }, icon(iconName), h('div.tile-title', null, title), h('div.small.muted', null, sub));
 }
 
 /** Artists ranked by how many liked tracks they have; artwork borrowed from one of those tracks. */
@@ -71,7 +71,7 @@ defineRoute('collection', ({ scope }) => {
       tile('download', 'Скачанное', tracksLabel(done), () => navigate('downloads')),
       tile('folder', 'Мои файлы', tracksLabel(app.local.value.length), () => navigate('local')),
       tile('clock', 'История', played ? `Сегодня: ${tracksLabel(played)}` : 'Сегодня',  () => navigate('history')),
-      tile('import', 'Перенос музыки', 'Spotify, Яндекс, списком', () => navigate('import')),
+      tile('import', 'Перенос музыки', 'Spotify, Яндекс, списком', () => navigate('import'), true),
     );
   });
 

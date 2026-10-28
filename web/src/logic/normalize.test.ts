@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Track } from '../bridge/contract';
-import { artistKey, cleanTitle, normalizeTrack, songKey, splitArtists, versionTags } from './normalize';
+import { artistKey, cleanTitle, normalizeTrack, songKey, songKeys, splitArtists, versionTags } from './normalize';
 
 const yt = (title: string, artist: string, extra: Partial<Track> = {}): Track => ({
   id: `yt:${title}`,
@@ -67,6 +67,22 @@ describe('versions', () => {
     expect(songKey({ title: 'Toscana', artist: 'Zericxxn' })).not.toBe(a);
   });
 
+  it('keys re-uploads of one song the same', () => {
+    const a = songKey({ title: 'Белые ночи', artist: 'Сплин' });
+    expect(songKey({ title: 'Сплин - Белые ночи (Official Video)', artist: 'Russian Rock Channel' })).toBe(a);
+    expect(songKey({ title: 'Белые ночи | текст песни', artist: 'Сплин' })).toBe(a);
+    expect(songKey({ title: 'Belye nochi', artist: 'Splin' })).toBe(a);
+    expect(songKey({ title: 'Белые ночи', artist: 'Splin' })).toBe(a);
+    expect(songKey({ title: 'Beyoncé - Halo (Lyrics)', artist: 'Lyrics Hub' })).toBe(songKey({ title: 'Halo', artist: 'Beyonce' }));
+  });
+
+  it('shares a title key for distinctive titles only', () => {
+    const a = songKeys({ title: 'Fall From The Sky', artist: 'RomancePlanet' });
+    const b = songKeys({ title: 'Fall From The Sky (slowed)', artist: 'Some Edits' });
+    expect(a.some((k) => b.includes(k))).toBe(true);
+    expect(songKeys({ title: 'Halo', artist: 'Beyonce' })).toHaveLength(1);
+  });
+
   it('keys artists by the first credit', () => {
     expect(artistKey('MORGENSHTERN, Элджей')).toBe('morgenshtern');
     expect(artistKey('Jiandro & Wbenix')).toBe('jiandro');
@@ -78,5 +94,12 @@ describe('splitArtists', () => {
     expect(splitArtists('Elgy, MORGENSHTERN & Xcho feat. Kai')).toEqual(['Elgy', 'MORGENSHTERN', 'Xcho', 'Kai']);
     expect(splitArtists('Macan x Jah Khalib')).toEqual(['Macan', 'Jah Khalib']);
     expect(splitArtists('IOWA - Topic')).toEqual(['IOWA']);
+  });
+});
+
+describe('normalizeTrack official', () => {
+  it('drops the artist repeated in an official title', () => {
+    const t = normalizeTrack({ id: 'yt:x', source: 'yt', title: 'Sia - Snowman [Official Video]', artist: 'Sia', durationMs: 1, official: true });
+    expect(t.title).toBe('Snowman');
   });
 });

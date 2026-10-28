@@ -6,10 +6,11 @@ import { server } from '../services/server';
 import { formatBytes, h, replaceChildren, tracksLabel } from '../core/dom';
 import type { Scope } from '../core/signal';
 import { app } from '../core/store';
-import { parseTrackList } from '../logic/match';
+import { cleanFileTrack, parseTrackList } from '../logic/match';
 import { adoptSourceMeta, findTrack } from '../services/catalog';
-import { createPlaylist, refreshLibrary } from '../services/library';
+import { addToPlaylist, createPlaylist, refreshLibrary } from '../services/library';
 import { appBar, button, chip, emptyState, listItem, skeletonRows, watchScroll } from '../ui/components';
+import { actionSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
 
 /**
@@ -18,6 +19,55 @@ import { toast } from '../ui/toast';
  */
 
 const PARALLEL = 3;
+
+/** Where imported tracks go: a new playlist, an existing one or likes. */
+type Target = { kind: 'new' } | { kind: 'likes' } | { kind: 'playlist'; id: number; name: string };
+
+/** Destination chips; the import button shows the destination, so the choice is never ambiguous. */
+function targetPicker(onChange: () => void): { el: HTMLElement; get: () => Target; label: () => string } {
+  let target: Target = { kind: 'new' };
+  const el = h('div.chips', { style: { padding: '0' } });
+  const set = (t: Target) => {
+    target = t;
+    render();
+    onChange();
+  };
+  const choosePlaylist = () => {
+    const list = app.playlists.peek();
+    if (!list.length) return toast('Плейлистов пока нет — выберите «Новый плейлист»');
+    actionSheet(
+      h('div.h2', null, 'В какой плейлист'),
+      list.map((p) => ({ icon: 'playlist', label: p.name, sub: tracksLabel(p.count), run: () => set({ kind: 'playlist', id: p.id, name: p.name }) })),
+    );
+  };
+  const render = () =>
+    replaceChildren(
+      el,
+      chip('Новый плейлист', target.kind === 'new', () => set({ kind: 'new' })),
+      chip(target.kind === 'playlist' ? `«${target.name}»` : 'В плейлист…', target.kind === 'playlist', choosePlaylist),
+      chip('Мне нравится', target.kind === 'likes', () => set({ kind: 'likes' })),
+    );
+  render();
+  const label = () => (target.kind === 'likes' ? 'в «Мне нравится»' : target.kind === 'playlist' ? `в «${target.name}»` : 'в новый плейлист');
+  return { el, get: () => target, label };
+}
+
+/** Saves the tracks to the chosen place; returns the playlist id when the tracks went to a playlist. */
+async function saveTo(target: Target, name: string, tracks: Track[]): Promise<number | null> {
+  if (!tracks.length) return null;
+  if (target.kind === 'likes') {
+    // Oldest first so the list keeps its order at the top of "Мне нравится".
+    for (const t of [...tracks].reverse()) await call('like', { track: t, liked: true });
+    await refreshLibrary();
+    return null;
+  }
+  if (target.kind === 'playlist') {
+    await addToPlaylist(target.id, tracks);
+    await refreshLibrary();
+    return target.id;
+  }
+  return (await createPlaylist(name, tracks)).id;
+}
 
 defineRoute('import', ({ scope }) => {
   const screen = h('div.screen');
@@ -80,11 +130,9 @@ function showSource(scope: Scope, body: HTMLElement): void {
 }
 
 function showPreview(scope: Scope, body: HTMLElement, list: ImportedList): void {
-  let target: 'playlist' | 'likes' = 'playlist';
-  const chips = h('div.chips', { style: { padding: '0' } });
-  const renderChips = () =>
-    replaceChildren(chips, chip('Новый плейлист', target === 'playlist', () => ((target = 'playlist'), renderChips())), chip('В «Мне нравится»', target === 'likes', () => ((target = 'likes'), renderChips())));
-  renderChips();
+  const picker = targetPicker(() => (go.textContent = `Перенести ${picker.label()}`));
+  const go = button('', () => runImport(scope, body, list, picker.get()), { cls: 'primary block' });
+  go.textContent = `Перенести ${picker.label()}`;
   replaceChildren(
     body,
     h(
@@ -92,8 +140,8 @@ function showPreview(scope: Scope, body: HTMLElement, list: ImportedList): void 
       { style: { gap: 'var(--s-3)' } },
       h('div.h2', null, list.title),
       h('div.muted', null, `${tracksLabel(list.tracks.length)} · ${list.source === 'spotify' ? 'Spotify' : list.source === 'yandex' ? 'Яндекс Музыка' : 'список'}`),
-      chips,
-      button('Перенести', () => runImport(scope, body, list, target), { cls: 'primary block' }),
+      picker.el,
+      go,
       button('Назад', () => showSource(scope, body), { cls: 'ghost block' }),
     ),
     h('div.section'),
@@ -138,11 +186,12 @@ async function showTelegram(scope: Scope, body: HTMLElement): Promise<void> {
       toast((e as Error).message, { icon: 'alert' });
     }
   };
-  let target: 'playlist' | 'likes' = 'playlist';
-  const chips = h('div.chips', { style: { padding: '0' } });
-  const renderChips = () =>
-    replaceChildren(chips, chip('Новый плейлист', target === 'playlist', () => ((target = 'playlist'), renderChips())), chip('В «Мне нравится»', target === 'likes', () => ((target = 'likes'), renderChips())));
-  renderChips();
+  // File tags are often missing or hold the file name: clean them before showing and searching.
+  list = { ...list, tracks: list.tracks.map((t) => ({ ...t, ...cleanFileTrack(t.title, t.artist) })) };
+  const tgList = list;
+  const picker = targetPicker(() => (go.textContent = `Перенести ${tracksLabel(tgList.tracks.length)} ${picker.label()}`));
+  const go = button('', () => runTelegramImport(scope, body, tgList, picker.get()), { cls: 'primary block' });
+  go.textContent = `Перенести ${tracksLabel(list.tracks.length)} ${picker.label()}`;
   replaceChildren(
     body,
     h(
@@ -153,8 +202,8 @@ async function showTelegram(scope: Scope, body: HTMLElement): Promise<void> {
         ? `Пересылайте или отправляйте аудиофайлы боту @${list.bot} — они появятся здесь. До 20 МБ на файл.`
         : `Привяжите Telegram к аккаунту: откроется бот @${list.bot}, нажмите «Старт». Потом отправляйте ему аудиофайлы.`),
       button(list.linked ? 'Открыть бота' : 'Привязать Telegram', list.linked ? () => call('openUrl', { text: `https://t.me/${list.bot}` }) : link, { cls: list.linked ? 'ghost block' : 'primary block' }),
-      list.tracks.length ? chips : null,
-      list.tracks.length ? button(`Перенести ${tracksLabel(list.tracks.length)}`, () => runTelegramImport(scope, body, list, target), { cls: 'primary block' }) : null,
+      list.tracks.length ? picker.el : null,
+      list.tracks.length ? go : null,
       button('Обновить', () => showTelegram(scope, body), { cls: 'ghost block' }),
       button('Назад', () => showSource(scope, body), { cls: 'ghost block' }),
     ),
@@ -163,7 +212,7 @@ async function showTelegram(scope: Scope, body: HTMLElement): Promise<void> {
   );
 }
 
-async function runTelegramImport(scope: Scope, body: HTMLElement, list: TgList, target: 'playlist' | 'likes'): Promise<void> {
+async function runTelegramImport(scope: Scope, body: HTMLElement, list: TgList, target: Target): Promise<void> {
   let cancelled = false;
   scope.add(() => (cancelled = true));
   const fill = h('i', { style: { width: '0%' } });
@@ -194,12 +243,7 @@ async function runTelegramImport(scope: Scope, body: HTMLElement, list: TgList, 
     fill.style.width = `${((i + 1) / list.tracks.length) * 100}%`;
     status.textContent = `${i + 1} из ${list.tracks.length} · с YouTube ${online} · файлом ${copied}${failed ? ` · ошибок ${failed}` : ''}`;
   }
-  let playlistId: number | null = null;
-  if (done.length) {
-    if (target === 'playlist') playlistId = (await createPlaylist('Из Telegram', done)).id;
-    else for (const t of [...done].reverse()) await call('like', { track: t, liked: true });
-    await refreshLibrary();
-  }
+  const playlistId = await saveTo(target, 'Из Telegram', done);
   replaceChildren(
     body,
     h(
@@ -213,7 +257,7 @@ async function runTelegramImport(scope: Scope, body: HTMLElement, list: TgList, 
   );
 }
 
-async function runImport(scope: Scope, body: HTMLElement, list: ImportedList, target: 'playlist' | 'likes'): Promise<void> {
+async function runImport(scope: Scope, body: HTMLElement, list: ImportedList, target: Target): Promise<void> {
   let cancelled = false;
   scope.add(() => (cancelled = true));
   const fill = h('i', { style: { width: '0%' } });
@@ -252,16 +296,7 @@ async function runImport(scope: Scope, body: HTMLElement, list: ImportedList, ta
 
   const matched = [...new Map(found.filter((t): t is Track => !!t).map((t) => [t.id, t])).values()];
   const missing = list.tracks.filter((_, i) => !found[i]);
-  let playlistId: number | null = null;
-  if (matched.length) {
-    if (target === 'playlist') {
-      playlistId = (await createPlaylist(list.title, matched)).id;
-    } else {
-      // Oldest first so the list keeps its order at the top of "Мне нравится".
-      for (const t of [...matched].reverse()) await call('like', { track: t, liked: true });
-      await refreshLibrary();
-    }
-  }
+  const playlistId = await saveTo(target, list.title, matched);
 
   replaceChildren(
     body,

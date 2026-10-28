@@ -70,6 +70,44 @@ export function bestMatch(src: ImportedTrack, candidates: Track[]): Track | null
   return best;
 }
 
+const SITE_TLD = 'ru|com|net|fm|org|me|su|info|cc|io|to|top|club|pro|online|xyz|biz|ws|tv|by|ua|kz|site|music|mobi';
+const SITE_RE = new RegExp(`[([{]?\\s*(?:https?://)?(?:www\\.)?[\\w-]+(?:\\.[\\w-]+)*\\.(?:${SITE_TLD})(?:/\\S*)?\\s*[)\\]}]?`, 'gi');
+const FILE_NOISE_RE = /[([{]?\s*(?:\d{2,3}\s*kbps|mp3|flac|m4a|ogg|скачать|бесплатно|free\s+download|@[\w.]+)\s*[)\]}]?/gi;
+
+/**
+ * Title and artist of an audio file sent to the Telegram bot: tags are often missing or carry the file name
+ * ("01._Artist_-_Song_(muzofond.fm).mp3"), so site names, bitrates, track numbers and underscores are dropped
+ * and "Artist - Title" is split.
+ */
+export function cleanFileTrack(rawTitle: string, rawArtist: string): { title: string; artist: string } {
+  const tidy = (s: string) =>
+    s
+      .replace(/\.(?:mp3|m4a|flac|ogg|opus|wav|aac)$/i, '')
+      .replace(/_+/g, ' ')
+      .replace(/%20/g, ' ')
+      .replace(SITE_RE, ' ')
+      .replace(FILE_NOISE_RE, ' ')
+      .replace(/[([{]\s*[)\]}]/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/^[\s|\-–—:.,]+|[\s|\-–—:,]+$/g, '')
+      .trim();
+  let title = tidy(rawTitle).replace(/^\d{1,3}(?:[.)]\s*|\s+[-–—]\s+)/, '');
+  let artist = tidy(rawArtist);
+  const parts = title.split(/\s+[-–—]\s+/);
+  if (parts.length >= 2) {
+    const head = parts[0].trim();
+    if (!artist) {
+      artist = head;
+      title = parts.slice(1).join(' - ');
+    } else if (head.toLowerCase() === artist.toLowerCase()) {
+      title = parts.slice(1).join(' - ');
+    }
+  }
+  if (/^(?:unknown|неизвестен|неизвестный|various artists?|va)$/i.test(artist)) artist = '';
+  title = cleanTitle(title) || title || 'Без названия';
+  return { title, artist };
+}
+
 /** "Artist - Title" lines, or CSV exports (Exportify, TuneMyMusic…) with title/artist columns. */
 export function parseTrackList(text: string): ImportedTrack[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);

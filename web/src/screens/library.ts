@@ -1,12 +1,12 @@
 import { defineRoute, goBack, navigate } from '../app/router';
 import { call } from '../bridge/bridge';
 import type { Playlist, Track } from '../bridge/contract';
-import { h, icon, replaceChildren, setIcon, tracksLabel } from '../core/dom';
+import { h, icon, plural, replaceChildren, setIcon, tracksLabel } from '../core/dom';
 import { track, type Scope } from '../core/signal';
 import { app } from '../core/store';
 import { createPlaylist, download, notDownloaded } from '../services/library';
 import { playListWave, playTracks, shuffle } from '../services/playback';
-import { appBar, cover, emptyState, iconButton, playButton, trackRow, watchScroll } from '../ui/components';
+import { appBar, cover, emptyState, iconButton, listenButtons, pageIntro, playButton, trackRow, watchScroll } from '../ui/components';
 import { pageHero, totalDuration } from '../ui/hero';
 import { actionSheet, confirmSheet, promptSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
@@ -113,29 +113,27 @@ function playlistCover(p: Playlist): HTMLElement {
 
 defineRoute('playlists', ({ scope }) => {
   const screen = h('div.screen');
-  const bar = appBar({ title: 'Плейлисты', back: goBack, alwaysTitle: false });
+  const create = async () => {
+    const name = await promptSheet({ title: 'Новый плейлист', placeholder: 'Название' });
+    if (name) navigate('playlist', { id: (await createPlaylist(name)).id });
+  };
+  const bar = appBar({ title: 'Плейлисты', back: goBack, actions: [iconButton('plus', 'Новый плейлист', create)] });
   watchScroll(screen, bar);
-  const list = h('div');
+  const body = h('div');
   scope.effect(() => {
+    const list = app.playlists.value;
     replaceChildren(
-      list,
+      body,
+      pageIntro('Плейлисты', list.length ? `${list.length} ${plural(list.length, 'плейлист', 'плейлиста', 'плейлистов')}` : null),
       h(
-        'div.row',
-        {
-          onclick: async () => {
-            const name = await promptSheet({ title: 'Новый плейлист', placeholder: 'Название' });
-            if (name) navigate('playlist', { id: (await createPlaylist(name)).id });
-          },
-        },
-        h('div.cover', null, icon('plus')),
-        h('div.row-main', null, h('div.row-title', null, 'Новый плейлист')),
-      ),
-      app.playlists.value.map((p) =>
-        h('div.row', { onclick: () => navigate('playlist', { id: p.id }) }, playlistCover(p), h('div.row-main', null, h('div.row-title.ellipsis', null, p.name), h('div.row-sub', null, tracksLabel(p.count))), icon('chevron-right', 'faint')),
+        'div.card-grid.playlists',
+        null,
+        h('div.card', { onclick: create }, h('div.cover.new-cover', null, icon('plus')), h('div.card-title', null, 'Новый плейлист'), h('div.card-sub', null, 'Создать')),
+        list.map((p) => h('div.card', { onclick: () => navigate('playlist', { id: p.id }) }, playlistCover(p), h('div.card-title.ellipsis', null, p.name), h('div.card-sub', null, tracksLabel(p.count)))),
       ),
     );
   });
-  screen.append(bar, h('div.page-head', null, h('h1.h1', null, 'Плейлисты')), list);
+  screen.append(bar, body);
   return screen;
 });
 
@@ -242,9 +240,8 @@ defineRoute('history', () => {
   const bar = appBar({
     title: 'История',
     back: goBack,
-    alwaysTitle: true,
     actions: [
-      iconButton('trash', 'Очистить', async () => {
+      iconButton('trash', 'Очистить историю', async () => {
         if (await confirmSheet({ title: 'Очистить историю?', text: 'Рекомендации начнут учиться заново.', ok: 'Очистить', danger: true })) {
           await call('historyClear');
           load();
@@ -252,26 +249,31 @@ defineRoute('history', () => {
       }),
     ],
   });
+  watchScroll(screen, bar);
   const body = h('div');
   const load = async () => {
     const entries = await call('history', { limit: 500 }).catch(() => []);
-    if (!entries.length) return replaceChildren(body, emptyState('clock', 'История пуста', 'Здесь появится всё, что вы слушали.'));
+    if (!entries.length) return replaceChildren(body, pageIntro('История', null), emptyState('clock', 'История пуста', 'Здесь появится всё, что вы слушали.'));
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 864e5).toDateString();
     const groups = new Map<string, typeof entries>();
     for (const e of entries) {
-      const day = new Date(e.playedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+      const d = new Date(e.playedAt);
+      const day = d.toDateString() === today ? 'Сегодня' : d.toDateString() === yesterday ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
       groups.set(day, [...(groups.get(day) ?? []), e]);
     }
     const all = entries.map((e) => e.track);
     let offset = 0;
     replaceChildren(
       body,
+      pageIntro('История', tracksLabel(entries.length), listenButtons(all, 'История')),
       [...groups].map(([day, list]) => {
         const start = offset;
         offset += list.length;
         return h(
           'section',
           null,
-          h('div.section-head', null, h('div.small.muted', null, day)),
+          h('div.day-head', null, day),
           list.map((e, i) =>
             trackRow(e.track, {
               sub: `${e.track.artist}${e.skipped ? ' · пропущен' : ''}`,

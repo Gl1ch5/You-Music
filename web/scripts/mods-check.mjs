@@ -27,7 +27,7 @@ await page.route('**/mods/**', async (route) => {
 });
 await page.addInitScript((m) => (window.__mockMods = m), mods);
 await page.goto('http://localhost:4174/index.html');
-await page.waitForSelector('.stream-row');
+await page.waitForSelector('.reco-hero');
 await page.click('.page-head .btn-icon');
 await page.click('.item:has-text("Моды")');
 await page.waitForSelector('.page-head h1:has-text("Моды")');
@@ -43,11 +43,11 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
-await page.click('.stream-row button');
+await page.click('.reco-hero .play-btn');
 await page.waitForTimeout(600);
 await page.click('.mini');
 await page.waitForTimeout(800);
-const modButton = await page.$('.player-actions .action[aria-label="Таймер сна"]');
+const modButton = await page.$('.player-pills .player-pill[aria-label="Таймер сна"]');
 if (!modButton) errors.push('sleep-timer button missing');
 else {
   await modButton.click();

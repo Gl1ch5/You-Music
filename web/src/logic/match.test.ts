@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Track } from '../bridge/contract';
-import { bestMatch, parseTrackList } from './match';
+import { bestMatch, cleanFileTrack, parseTrackList } from './match';
 
 const t = (id: string, title: string, artist: string, sec: number, official = false): Track => ({ id, source: 'yt', title, artist, durationMs: sec * 1000, official });
 
@@ -53,5 +53,17 @@ describe('parseTrackList', () => {
       { title: 'Housewife', artist: 'Tate McRae', durationMs: 208810 },
       { title: 'Song, with comma', artist: 'A, B', durationMs: 1000 },
     ]);
+  });
+});
+
+describe('cleanFileTrack', () => {
+  it('cleans file names with sites, bitrates and underscores', () => {
+    expect(cleanFileTrack('01._Кино_-_Группа_крови_(muzofond.fm)', '')).toEqual({ artist: 'Кино', title: 'Группа крови' });
+    expect(cleanFileTrack('Rasputin [320 kbps] www.zaycev.net', 'Boney M.')).toEqual({ artist: 'Boney M.', title: 'Rasputin' });
+    expect(cleanFileTrack('Boney M. - Rasputin', 'Boney M.')).toEqual({ artist: 'Boney M.', title: 'Rasputin' });
+  });
+  it('keeps numbers that are part of the title', () => {
+    expect(cleanFileTrack('7 rings', 'Ariana Grande').title).toBe('7 rings');
+    expect(cleanFileTrack('Track', 'Unknown').artist).toBe('');
   });
 });

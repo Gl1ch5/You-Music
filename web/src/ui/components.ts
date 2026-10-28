@@ -5,6 +5,7 @@ import { effect, track, type Scope } from '../core/signal';
 import { app, currentTrack, isPlayable, likedIds, livePosition, player } from '../core/store';
 import { artFor, type ArtSize } from '../services/art';
 import { toggleLike } from '../services/library';
+import { playTracks, shuffle } from '../services/playback';
 import { linkArtist } from './artistLink';
 
 /* ───────── Cover ───────── */
@@ -269,7 +270,8 @@ export function progressBar(scope: Scope, onSeek: (ms: number) => void): { el: H
     const ratio = duration > 0 ? Math.min(1, pos / duration) : 0;
     fill.style.transform = `scaleX(${ratio})`;
     const w = el.clientWidth;
-    thumb.style.transform = `translateX(${ratio * w}px)`;
+    // `translate`, not `transform`: the thumb's `scale` would otherwise shrink the offset too and the thumb would lag behind the fill.
+    thumb.style.translate = `${ratio * w}px 0`;
     tip.style.transform = `translateX(${Math.min(Math.max(ratio * w - 24, 0), w - 48)}px)`;
     elapsed.textContent = formatTime(pos);
     remaining.textContent = duration > 0 ? `-${formatTime(duration - pos)}` : '';
@@ -322,6 +324,30 @@ export function appBar(opts: { title: string; back?: () => void; actions?: Child
     h(`div.appbar-title.ellipsis${opts.alwaysTitle ? '.always' : ''}`, null, opts.title),
     ...(opts.actions ?? []),
   );
+}
+
+/**
+ * Header of a simple collection page (playlists, downloads, my files, history): title, one quiet line of facts
+ * and two equal buttons — the same on every such page.
+ */
+export function pageIntro(title: string, sub: HTMLElement | string | null, actions: HTMLElement[] = []): HTMLElement {
+  return h(
+    'div.page-intro',
+    null,
+    h('h1.h1', null, title),
+    sub ? h('div.page-sub.small.muted', null, sub) : null,
+    actions.length ? h('div.page-actions', null, actions) : null,
+  );
+}
+
+/** "Слушать" + "Перемешать" for a list of tracks. */
+export function listenButtons(tracks: Track[], title: string): HTMLElement[] {
+  if (!tracks.length) return [];
+  const ctx = { kind: 'list' as const, title };
+  return [
+    button('Слушать', () => playTracks(tracks, 0, ctx), { icon: 'play', cls: 'primary' }),
+    button('Перемешать', () => playTracks(shuffle(tracks), 0, ctx), { icon: 'shuffle' }),
+  ];
 }
 
 export function watchScroll(screen: HTMLElement, bar: HTMLElement, threshold = 24): void {
