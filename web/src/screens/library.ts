@@ -5,7 +5,7 @@ import { h, icon, replaceChildren, setIcon, tracksLabel } from '../core/dom';
 import { track, type Scope } from '../core/signal';
 import { app } from '../core/store';
 import { createPlaylist, download, notDownloaded } from '../services/library';
-import { playTracks, shuffle } from '../services/playback';
+import { playListWave, playTracks, shuffle } from '../services/playback';
 import { appBar, cover, emptyState, iconButton, playButton, trackRow, watchScroll } from '../ui/components';
 import { pageHero, totalDuration } from '../ui/hero';
 import { actionSheet, confirmSheet, promptSheet } from '../ui/sheet';
@@ -39,6 +39,7 @@ export function listPage(
         iconButton('shuffle', 'Перемешать', () => playTracks(shuffle(opts.tracks), 0, ctx)),
         playButton(scope, { playing: () => false, onToggle: () => playTracks(opts.tracks, 0, ctx) }),
         downloadAllButton(scope, opts.tracks),
+        ...(opts.tracks.filter((t) => t.source === 'yt').length >= 2 ? [iconButton('wave', 'Волна по плейлисту', () => playListWave(opts.title, opts.tracks))] : []),
       ]
     : [];
   screen.append(

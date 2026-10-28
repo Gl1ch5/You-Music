@@ -27,6 +27,8 @@ import { uiBus } from './services/events';
 import { initLibrary, refreshLibrary } from './services/library';
 import { initPlayback, restorePlayer } from './services/playback';
 import { loadSettings } from './services/settings';
+import { loadDislikes } from './services/dislikes';
+import { loadWaves } from './services/waves';
 import { refreshAiConfig } from './services/ai';
 import { initDeepLinks } from './services/deeplink';
 import { initBackup } from './services/backup';
@@ -72,7 +74,7 @@ async function boot(): Promise<void> {
   });
   window.addEventListener('keydown', (e) => e.key === 'Escape' && (handleBack() || closePlayer()));
 
-  await Promise.all([refreshLibrary().catch(console.error), restorePlayer(), refreshAiConfig()]);
+  await Promise.all([refreshLibrary().catch(console.error), restorePlayer(), refreshAiConfig(), loadDislikes(), loadWaves()]);
   initUpdates();
   initServer();
   initDeepLinks();

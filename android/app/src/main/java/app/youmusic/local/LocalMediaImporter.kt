@@ -44,7 +44,10 @@ class LocalMediaImporter(
         library.deleteTrack(id)
         paths.artFile(id).delete()
         track.url?.let { uri ->
-            runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val parsed = Uri.parse(uri)
+            // Files the app keeps itself (imported from Telegram) are deleted; picked files only lose the permission.
+            if (parsed.scheme == "file") parsed.path?.let { java.io.File(it) }?.takeIf { it.path.startsWith(context.filesDir.path) }?.delete()
+            else runCatching { context.contentResolver.releasePersistableUriPermission(parsed, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         }
     }
 

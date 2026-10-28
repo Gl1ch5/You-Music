@@ -119,3 +119,11 @@ function compact(s: string): string {
 export function normalizeQuery(q: string): string[] {
   return compact(q.toLowerCase()).split(' ').filter(Boolean);
 }
+
+/** Splits a credit line into artists: "A, B & C feat. D" → [A, B, C, D]. */
+export function splitArtists(artist: string): string[] {
+  return cleanArtist(artist)
+    .split(/\s*(?:,|;|&|\bfeat\.?(?=\s)|\bft\.?(?=\s)|\bfeaturing\b|\s[xх×]\s|\s\/\s)\s*/i)
+    .map((s) => cleanArtist(s.trim()))
+    .filter(Boolean);
+}

@@ -51,7 +51,7 @@ defineRoute('settings', ({ scope }) => {
         listItem({
           icon: 'cloud',
           title: server.value.signedIn ? (server.value.login ?? 'Аккаунт') : 'Аккаунт You Music',
-          sub: server.value.signedIn ? 'Синхронизация, нейро-подборки, бесплатный прокси' : 'Необязательно: облако для музыки, 50 нейро-подборок в день, прокси',
+          sub: server.value.signedIn ? 'Синхронизация, умные рекомендации, бесплатный прокси' : 'Необязательно: облако для музыки, умные рекомендации, прокси',
           onClick: () => navigate('account'),
         }),
       ),
@@ -71,7 +71,13 @@ defineRoute('settings', ({ scope }) => {
           sub: s.crossfadeSec ? `Затухание ${s.crossfadeSec} с между треками` : 'Выключены',
           onClick: () => choose<string>('Плавные переходы', { '0': 'Выключены', '2': '2 секунды', '4': '4 секунды', '6': '6 секунд', '8': '8 секунд' }, String(s.crossfadeSec), (v) => saveSettings({ crossfadeSec: Number(v) })),
         }),
-        listItem({ icon: 'sparkle', title: 'Нейро-рекомендации', sub: app.aiEnabled.value ? 'Включены' : 'Настроить модель и API', onClick: () => navigate('ai') }),
+        listItem({
+          icon: 'tune',
+          title: 'Подбор рекомендаций',
+          sub: s.recoDepth === 'deep' ? 'Тщательнее: больше кандидатов, сильная модель' : 'Быстрее: меньше ожидания',
+          onClick: () => choose<Settings['recoDepth']>('Подбор рекомендаций', { fast: 'Быстрее', deep: 'Тщательнее' }, s.recoDepth, (recoDepth) => saveSettings({ recoDepth })),
+        }),
+        listItem({ icon: 'sparkle', title: 'Своя нейросеть', sub: app.aiEnabled.value ? 'Подключена — помогает с рекомендациями' : 'Подключить свою модель и API', onClick: () => navigate('ai') }),
         listItem({ icon: 'search', title: 'Скрывать версии в поиске', sub: 'Sped up, slowed, nightcore — только если ищете их', trailing: switchControl(s.hideVersionsInSearch, (hideVersionsInSearch) => saveSettings({ hideVersionsInSearch })) }),
       ),
       group(

@@ -9,12 +9,16 @@ import { artFor } from '../services/art';
 import { related } from '../services/catalog';
 import { download, removeDownload } from '../services/library';
 import { expectLoading, next, playTrackWave, playTracks, previous, seek, togglePlay } from '../services/playback';
-import { linkArtist } from '../ui/artistLink';
+import { linkArtist, refreshArtistLinks } from '../ui/artistLink';
+import { dislikes, isDisliked, toggleDislike } from '../services/dislikes';
+import type { Lyrics } from '../bridge/contract';
 import { onBack } from '../ui/back';
 import { button, emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
 import { applyDynamicBackground } from '../ui/hero';
 import { openSheet } from '../ui/sheet';
 import { openTrackMenu } from '../ui/trackMenu';
+import { busy } from '../core/busy';
+import { toast } from '../ui/toast';
 import { app } from '../core/store';
 
 let root: HTMLElement;
@@ -28,11 +32,15 @@ export function setMiniCoverSource(fn: () => DOMRect | null): void {
 
 export function mountFullPlayer(): HTMLElement {
   const scope = new Scope();
-  const bg = h('div.dyn-bg');
+  const bg = h('div.dyn-stack');
   const dim = h('div.dyn-dim');
   artBox = cover([], '', 'note');
   const glow = h('div.glow');
-  const art = h('div.player-art', null, glow, artBox);
+  const lyricLine = h('div.art-lyric', { attrs: { 'aria-hidden': 'true' }, onclick: (e: MouseEvent) => {
+    e.stopPropagation();
+    openLyrics();
+  } });
+  const art = h('div.player-art', null, glow, h('div.art-frame', null, artBox, lyricLine));
   const title = h('div.player-title.ellipsis');
   const artist = h('div.player-artist.ellipsis');
   linkArtist(artist, () => currentTrack.peek(), () => closePlayer());
@@ -86,7 +94,7 @@ export function mountFullPlayer(): HTMLElement {
     null,
     head,
     art,
-    h('div.player-meta', null, h('div', { style: { flex: '1', minWidth: '0' } }, title, artist), likeButton(scope, () => currentTrack.value)),
+    h('div.player-meta', null, h('div', { style: { flex: '1', minWidth: '0' } }, title, artist), dislikeButton(scope), likeButton(scope, () => currentTrack.value)),
     progress.el,
     h('div.times', null, progress.elapsed, progress.remaining),
     h(
@@ -104,26 +112,107 @@ export function mountFullPlayer(): HTMLElement {
   root = h('div.player', { attrs: { 'aria-hidden': 'true' } }, bg, dim, body);
 
   let paletteScope = new Scope();
+  let shownKey = '';
   scope.effect(() => {
     const t = currentTrack.value;
-    title.textContent = t?.title ?? '';
-    artist.textContent = t?.artist ?? '';
     context.textContent = player.context.value?.title ?? '';
+    // The queue and context change often (a wave refills, a track swaps); redraw only when the song itself changed.
+    const urls = t ? artFor(t, 'lg') : [];
+    const key = t ? `${t.id}|${t.title}|${t.artist}|${urls[0] ?? ''}` : '';
+    if (key === shownKey) return;
+    shownKey = key;
+    title.textContent = t?.title ?? '';
+    refreshArtistLinks(artist);
     if (!t) return;
-    const urls = artFor(t, 'lg');
     setCoverUrls(artBox, urls);
     paletteScope.dispose();
     paletteScope = new Scope();
-    bg.classList.remove('ready');
     applyDynamicBackground(paletteScope, bg, urls[0], (color) => {
       const g = mutedGlow(color);
       if (g) root.style.setProperty('--glow', g);
     });
   });
   scope.effect(() => art.classList.toggle('paused', !player.wantsPlay.value));
+  syncedLine(scope, lyricLine);
 
   attachDragToClose(head, art);
   return root;
+}
+
+function dislikeButton(scope: Scope): HTMLButtonElement {
+  const btn = h('button.btn-icon.dislike', {
+    attrs: { 'aria-label': 'Не нравится' },
+    onclick: (e: MouseEvent) => {
+      e.stopPropagation();
+      const t = currentTrack.peek();
+      if (!t) return;
+      haptic('light');
+      void toggleDislike(t);
+    },
+  }, reactiveIcon(scope, () => {
+    const list = dislikes.value;
+    return isDisliked(currentTrack.value, list) ? 'dislike-fill' : 'dislike';
+  }));
+  scope.effect(() => {
+    const list = dislikes.value;
+    const t = currentTrack.value;
+    btn.hidden = !t || t.source === 'local';
+    btn.classList.toggle('on', isDisliked(t, list));
+  });
+  return btn;
+}
+
+const lyricsCache = new Map<string, Promise<Lyrics>>();
+
+function lyricsOf(t: Track): Promise<Lyrics> {
+  let p = lyricsCache.get(t.id);
+  if (!p) {
+    p = call('lyrics', { artist: t.artist, title: t.title.replace(/\s*[([].*?[)\]]/g, ''), durationMs: t.durationMs });
+    p.catch(() => lyricsCache.delete(t.id));
+    lyricsCache.set(t.id, p);
+    if (lyricsCache.size > 30) lyricsCache.delete(lyricsCache.keys().next().value!);
+  }
+  return p;
+}
+
+/** The current line of synced lyrics over the bottom of the cover; tap opens the full text. */
+function syncedLine(scope: Scope, box: HTMLElement): void {
+  let lines: LrcLine[] = [];
+  let forId = '';
+  let active = -2;
+  let front = h('p');
+  let back = h('p');
+  box.append(front, back);
+  scope.effect(() => {
+    const open = player.fullOpen.value;
+    const t = currentTrack.value;
+    if (!open || !t || t.id === forId) return;
+    forId = t.id;
+    lines = [];
+    active = -2;
+    box.classList.remove('on');
+    if (t.source === 'local' && !t.artist) return;
+    lyricsOf(t)
+      .then((l) => {
+        if (currentTrack.peek()?.id !== t.id || !l.synced) return;
+        lines = parseLrc(l.synced);
+        box.classList.add('on');
+      })
+      .catch(() => undefined);
+  });
+  onFrame(scope, () => {
+    if (!lines.length || !player.fullOpen.peek()) return;
+    const pos = livePosition();
+    let idx = -1;
+    for (let i = 0; i < lines.length && lines[i].ms <= pos + 200; i++) idx = i;
+    if (idx === active) return;
+    active = idx;
+    const text = idx >= 0 ? lines[idx].text : '';
+    [front, back] = [back, front];
+    front.textContent = text === '♪' ? '' : text;
+    back.classList.remove('in');
+    front.classList.add('in');
+  });
 }
 
 function toggleDownload(): void {
@@ -322,12 +411,41 @@ function openLyrics(): void {
   if (!t) return;
   const scope = new Scope();
   const body = h('div', null, skeletonRows(4));
-  openSheet({ header: [trackCover(t, 'sm'), h('div.item-main', null, h('div.row-title.ellipsis', null, t.title), h('div.row-sub', null, 'Текст песни'))], content: body, onClose: () => scope.dispose() });
-  call('lyrics', { artist: t.artist, title: t.title.replace(/\s*[([].*?[)\]]/g, ''), durationMs: t.durationMs })
+  const translateBtn = iconButton('translate', 'Перевести на русский', () => void translate());
+  translateBtn.hidden = true;
+  let texts: string[] = [];
+  let lineEls: HTMLElement[] = [];
+  let translated = false;
+  const translate = async () => {
+    if (translated) return;
+    translated = true;
+    translateBtn.classList.add('accent');
+    try {
+      const res = await busy(call('translate', { lines: texts, to: 'ru' }));
+      res.lines.forEach((line, i) => {
+        if (lineEls[i] && line && line !== texts[i]) lineEls[i].append(h('span.lyric-tr', null, line));
+      });
+    } catch (e) {
+      translated = false;
+      translateBtn.classList.remove('accent');
+      toast(`Не удалось перевести: ${(e as Error).message}`, { icon: 'alert' });
+    }
+  };
+  /** Russian text needs no translation: offer it only when most of the letters are not Cyrillic. */
+  const offerTranslation = (lines: string[], els: HTMLElement[]) => {
+    texts = lines;
+    lineEls = els;
+    const letters = lines.join('').replace(/[^\p{L}]/gu, '');
+    const cyr = letters.replace(/[^а-яё]/gi, '').length;
+    translateBtn.hidden = letters.length < 20 || cyr / letters.length > 0.5;
+  };
+  openSheet({ header: [trackCover(t, 'sm'), h('div.item-main', null, h('div.row-title.ellipsis', null, t.title), h('div.row-sub', null, 'Текст песни')), translateBtn], content: body, onClose: () => scope.dispose() });
+  lyricsOf(t)
     .then((lyr) => {
       if (lyr.synced) {
         const lines = parseLrc(lyr.synced);
         const els = lines.map((l) => h('p', { onclick: () => seek(l.ms) }, l.text));
+        offerTranslation(lines.map((l) => (l.text === '♪' ? '' : l.text)), els);
         replaceChildren(body, h('div.lyrics', null, els));
         let active = -1;
         onFrame(scope, () => {
@@ -342,7 +460,10 @@ function openLyrics(): void {
           active = idx;
         });
       } else if (lyr.plain) {
-        replaceChildren(body, h('div.lyrics.plain', null, lyr.plain.split('\n').map((l) => h('p', null, l || ' '))));
+        const lines = lyr.plain.split('\n');
+        const els = lines.map((l) => h('p', null, l || ' '));
+        offerTranslation(lines, els);
+        replaceChildren(body, h('div.lyrics.plain', null, els));
       } else {
         replaceChildren(body, emptyState('lyrics', 'Текста нет', 'Для этого трека текст не найден.'));
       }

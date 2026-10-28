@@ -1,5 +1,6 @@
 import type { HistoryEntry, Like, Track } from '../bridge/contract';
-import { averageVibe, vibeBonus, type Vibe } from './features';
+import { averageVibe, eraOf, eraPenalty, vibeBonus, type Era, type Vibe } from './features';
+import { filterScore, type RecoFilter } from './filters';
 import { artistKey, songKey } from './normalize';
 
 /**
@@ -9,12 +10,23 @@ import { artistKey, songKey } from './normalize';
  * Filters: nothing already liked or recently played, one version per song per session, ≤2 same artist in a row.
  * Vibe: when the source knows audio data (tempo, loudness, genres), the best candidates are nudged towards the
  * average vibe of the user's likes — or of the seed track for a wave "по треку".
+ * Era: songs far from the years the user actually listens to sink (no 2005 hits for a fan of new music).
+ * Dislikes: the song never comes back, its artist sinks. Filters (see filters.ts) combine and drop what fails.
  */
+
+export interface Dislike {
+  id: string;
+  /** songKey: every upload of the song. */
+  key: string;
+  artist: string;
+  at: number;
+}
 
 export interface RecoSignals {
   likes: Like[];
   history: HistoryEntry[];
   now: number;
+  dislikes?: Dislike[];
 }
 
 export interface RecoSource {
@@ -28,8 +40,11 @@ export interface RecoSource {
 
 /** How many top candidates get their vibe looked up per step, and how much it can move a score. */
 const VIBE_TOP = 30;
+const VIBE_TOP_FILTERED = 60;
 const VIBE_WEIGHT_TASTE = 0.9;
 const VIBE_WEIGHT_SEED = 1.8;
+const ERA_WEIGHT_TASTE = 1.6;
+const ERA_WEIGHT_SEED = 0.8;
 
 export type WaveMode = 'mix' | 'familiar' | 'discover';
 
@@ -43,13 +58,16 @@ export interface Profile {
   /** Share of plays skipped per artist (0..1), only for artists with ≥ 2 plays. */
   artistSkip: Map<string, number>;
   skippedIds: Set<string>;
+  /** Disliked songs: never recommended. */
+  blockedIds: Set<string>;
+  blockedKeys: Set<string>;
 }
 
 const DAY = 24 * 3600_000;
 const RECENT_WINDOW = 3 * DAY;
 const RECENT_COUNT = 60;
 
-export function buildProfile({ likes, history, now }: RecoSignals): Profile {
+export function buildProfile({ likes, history, now, dislikes = [] }: RecoSignals): Profile {
   const artistScore = new Map<string, number>();
   const bump = (artist: string, by: number) => {
     const k = artistKey(artist);
@@ -75,6 +93,11 @@ export function buildProfile({ likes, history, now }: RecoSignals): Profile {
   }
   const artistSkip = new Map<string, number>();
   for (const [k, p] of plays) if (p.total >= 2) artistSkip.set(k, p.skipped / p.total);
+  // Each disliked song of an artist counts like a run of skips.
+  for (const d of dislikes) {
+    const k = artistKey(d.artist);
+    if (k) artistSkip.set(k, Math.min(1.6, (artistSkip.get(k) ?? 0) + 0.4));
+  }
 
   const recent = history.filter((h, i) => i < RECENT_COUNT || now - h.playedAt < RECENT_WINDOW);
   return {
@@ -85,6 +108,8 @@ export function buildProfile({ likes, history, now }: RecoSignals): Profile {
     artistScore,
     artistSkip,
     skippedIds,
+    blockedIds: new Set(dislikes.map((d) => d.id)),
+    blockedKeys: new Set(dislikes.map((d) => d.key)),
   };
 }
 
@@ -169,6 +194,8 @@ export function selectTracks(scored: Scored[], profile: Profile, session: Sessio
         !profile.likedKeys.has(key) &&
         !profile.recentIds.has(track.id) &&
         !profile.recentKeys.has(key) &&
+        !profile.blockedIds.has(track.id) &&
+        !profile.blockedKeys.has(key) &&
         !session.seenIds.has(track.id) &&
         !session.seenKeys.has(key) &&
         track.durationMs < 15 * 60_000
@@ -212,6 +239,18 @@ export function limitArtistRuns(tracks: Track[], maxRun = 2, previous: Track[] =
   return out;
 }
 
+export interface WaveOptions {
+  /** Grow from these tracks instead of the user's likes: a wave by a playlist. */
+  seeds?: Track[];
+  filters?: RecoFilter[];
+  /** Already played in an earlier session of this wave (continuing it): never repeated. */
+  seen?: Track[];
+  /** Candidates whose vibe is looked up per step; more = slower but more precise. */
+  depth?: 'fast' | 'deep';
+  /** Only the extra source (the model) supplies songs: the user's own text filters only it can follow. */
+  extraOnly?: boolean;
+}
+
 /** Endless queue that grows from seeds and reacts to likes and skips while playing. */
 export class Wave {
   private profile: Profile | null = null;
@@ -226,6 +265,7 @@ export class Wave {
   private targetLoad: Promise<void> | null = null;
   private extraIds = new Set<string>();
   private extraPending: Promise<void> | null = null;
+  private era: Era | null = null;
 
   /** With `seed`, the wave grows only from that track (and what it plays), matching its vibe: "волна по треку". */
   constructor(
@@ -233,18 +273,31 @@ export class Wave {
     private mode: WaveMode = 'mix',
     private rng: () => number = Math.random,
     private seed: Track | null = null,
+    private options: WaveOptions = {},
   ) {}
 
   setMode(mode: WaveMode): void {
     this.mode = mode;
   }
 
+  /** Everything the wave has played so far (to save it and continue later). */
+  played(): Track[] {
+    return [...this.delivered];
+  }
+
+  get filters(): RecoFilter[] {
+    return this.options.filters ?? [];
+  }
+
   async next(count: number): Promise<Track[]> {
     await this.ensureProfile();
     const profile = this.profile!;
-    for (let attempt = 0; attempt < 4; attempt++) {
+    // Filters drop part of the candidates: look for more of them up front.
+    const want = this.filters.length ? count * 3 : count;
+    const step = this.options.depth === 'deep' ? 5 : 3;
+    for (let attempt = 0; attempt < (this.filters.length ? 6 : 4); attempt++) {
       const available = selectTracksPreview(scoreCandidates(this.candidates, profile, this.mode), profile, this.session);
-      if (available >= count || !(await this.expand(3))) break;
+      if (available >= want || !(await this.expand(step))) break;
     }
     await this.targetLoad;
     const scored = await this.withVibe(scoreCandidates(this.candidates, profile, this.mode));
@@ -274,40 +327,86 @@ export class Wave {
     if (this.profile) return;
     this.signalsCache = await this.source.signals();
     this.profile = buildProfile(this.signalsCache);
+    for (const t of this.options.seen ?? []) {
+      this.session.seenIds.add(t.id);
+      this.session.seenKeys.add(songKey(t));
+    }
     if (this.seed) {
       this.seedQueue = [{ track: this.seed, liked: true }];
       this.session.seenIds.add(this.seed.id);
       this.session.seenKeys.add(songKey(this.seed));
+    } else if (this.options.seeds?.length) {
+      // A playlist wave: its songs are the taste, shuffled so every start differs; they are not replayed.
+      const pool = [...this.options.seeds];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(this.rng() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      this.seedQueue = pool.map((track) => ({ track, liked: true }));
+      pool.forEach((t) => {
+        this.session.seenIds.add(t.id);
+        this.session.seenKeys.add(songKey(t));
+      });
     } else {
       this.seedQueue = pickSeeds(this.signalsCache, 12, this.rng);
     }
+    // Continuing a wave: grow from where it stopped.
+    if (!this.seed && this.options.seen?.length) this.seedQueue.unshift(...this.options.seen.slice(-4).map((track) => ({ track, liked: false })));
     // The target vibe is only needed for the final scoring: load it while the candidates are fetched.
     this.targetLoad = this.loadTarget().catch(() => undefined);
   }
 
-  /** Target vibe: the seed track's, or the average of the freshest likes. */
+  /** Target vibe and era: the seed track's, the playlist's, or those of the freshest likes and finished plays. */
   private async loadTarget(): Promise<void> {
     if (!this.source.vibes) return;
-    const tracks = this.seed ? [this.seed] : [...this.signalsCache!.likes].sort((a, b) => b.likedAt - a.likedAt).slice(0, 30).map((l) => l.track);
+    const signals = this.signalsCache!;
+    const taste = [
+      ...[...signals.likes].sort((a, b) => b.likedAt - a.likedAt).slice(0, 30).map((l) => l.track),
+      ...signals.history.filter((h) => h.completed).slice(0, 15).map((h) => h.track),
+    ];
+    const tracks = this.seed ? [this.seed] : this.options.seeds?.length ? this.options.seeds.slice(0, 40) : taste;
     const map = await this.source.vibes(tracks);
-    this.target = averageVibe(tracks.map((t) => map.get(t.id) ?? null), this.seed ? 1 : 3);
+    const vibes = tracks.map((t) => map.get(t.id) ?? null);
+    this.target = averageVibe(vibes, this.seed ? 1 : 3);
+    const seedYear = this.seed ? vibes[0]?.year : null;
+    this.era = seedYear ? { year: seedYear, spread: 6 } : eraOf(vibes);
   }
 
-  /** Looks up the vibe of the top candidates (cached per wave) and adjusts their scores. */
+  /**
+   * Looks up the vibe of the top candidates (cached per wave) and adjusts their scores by vibe, era and filters.
+   * Candidates a filter rejects are removed.
+   */
   private async withVibe(scored: Scored[]): Promise<Scored[]> {
-    if (!this.target || !this.source.vibes) return scored;
-    const top = [...scored].sort((a, b) => b.score - a.score).slice(0, VIBE_TOP).map((s) => s.track);
+    const filters = this.filters;
+    if (!this.source.vibes || (!this.target && !this.era && !filters.length)) return scored;
+    const top = [...scored]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, filters.length || this.options.depth === 'deep' ? VIBE_TOP_FILTERED : VIBE_TOP)
+      .map((s) => s.track);
     const unknown = top.filter((t) => !this.vibes.has(t.id));
     if (unknown.length) {
       const map = await this.source.vibes(unknown).catch(() => new Map<string, Vibe | null>());
       unknown.forEach((t) => this.vibes.set(t.id, map.get(t.id) ?? null));
     }
     const weight = this.seed ? VIBE_WEIGHT_SEED : VIBE_WEIGHT_TASTE;
-    return scored.map((s) => ({ ...s, score: s.score + vibeBonus(this.vibes.get(s.track.id), this.target, weight) }));
+    const eraWeight = this.seed ? ERA_WEIGHT_SEED : ERA_WEIGHT_TASTE;
+    const year = new Date(this.signalsCache?.now ?? Date.now()).getFullYear();
+    const out: Scored[] = [];
+    for (const s of scored) {
+      const v = this.vibes.get(s.track.id);
+      const f = filters.length ? filterScore(s.track, v, filters, year) : 0;
+      if (f == null) continue;
+      out.push({ ...s, score: s.score + f + vibeBonus(v, this.target, weight) + eraPenalty(v, this.era, eraWeight) });
+    }
+    return out;
   }
 
   private async expand(n: number): Promise<boolean> {
     const seeds: { track: Track; liked: boolean }[] = [];
+    if (this.options.extraOnly && this.source.extra) {
+      await this.refillExtra();
+      return this.extraLeft() > 0;
+    }
     while (seeds.length < n && this.seedQueue.length) {
       const s = this.seedQueue.shift()!;
       if (!this.expanded.has(s.track.id)) seeds.push(s);
@@ -324,7 +423,6 @@ export class Wave {
       await extra;
       return this.extraLeft() > 0;
     }
-    if (!seeds.length) return false;
     const [results] = await Promise.all([Promise.allSettled(seeds.map((s) => this.source.related(s.track))), extra]);
     results.forEach((r, i) => {
       const seed = seeds[i];

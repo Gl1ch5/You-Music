@@ -147,6 +147,9 @@ export interface ImportedTrack {
   title: string;
   artist: string;
   durationMs: number;
+  /** Square release cover from the source service, when it has one. */
+  artwork?: string | null;
+  album?: string | null;
 }
 
 export interface ImportedList {
@@ -166,6 +169,51 @@ export interface TrackFeatures {
   genres: string[];
   explicit: boolean;
   year?: number | null;
+  /** Deezer popularity, higher = more popular. */
+  rank?: number | null;
+  /** Album cover 1000×1000. */
+  cover?: string | null;
+}
+
+/** Technical details for the "О треке" sheet; unknown values are missing. */
+export interface TrackInfo {
+  source: 'download' | 'cache' | 'stream' | 'local';
+  container?: string | null;
+  codec?: string | null;
+  bitrateKbps?: number | null;
+  sampleRateHz?: number | null;
+  channels?: number | null;
+  sizeBytes?: number | null;
+  cachedBytes?: number | null;
+}
+
+export interface TgLink {
+  code: string;
+  url: string;
+  linked: boolean;
+}
+
+/** An audio file the user sent to the Telegram bot, kept on the server until imported. */
+export interface TgTrack {
+  id: string;
+  title: string;
+  artist: string;
+  durationMs: number;
+  size: number;
+  mime: string;
+  cover?: string | null;
+  at: number;
+}
+
+export interface TgList {
+  linked: boolean;
+  bot: string;
+  tracks: TgTrack[];
+}
+
+export interface Translation {
+  lines: string[];
+  from?: string | null;
 }
 
 export interface Lyrics {
@@ -321,11 +369,13 @@ export interface Commands {
   skipTo: [{ index: number }, void];
   queueAdd: [{ tracks: Track[]; next?: boolean }, void];
   queueRemove: [{ index: number }, void];
+  queueReplaceUpcoming: [{ tracks: Track[] }, void];
   queueMove: [{ from: number; to: number }, void];
   queueClear: [None, void];
   setRepeat: [{ mode: RepeatMode }, void];
   setShuffle: [{ enabled: boolean }, void];
   getPlayerState: [None, PlayerState];
+  trackInfo: [{ track: Track }, TrackInfo];
 
   search: [{ query: string; filter: SearchFilter; page?: string | null }, SearchPage];
   searchSuggestions: [{ query: string }, string[]];
@@ -333,8 +383,10 @@ export interface Commands {
   getCollection: [{ url: string }, CollectionPage];
   getArtist: [{ url: string }, ArtistPage];
   lyrics: [{ artist: string; title: string; durationMs: number }, Lyrics];
+  translate: [{ lines: string[]; to: string }, Translation];
   artworkPalette: [{ url: string }, Palette];
   importFetch: [{ url: string }, ImportedList];
+  chart: [{ source: 'yandex' }, ImportedList];
   trackFeatures: [{ tracks: { id: string; artist: string; title: string; durationMs: number }[] }, Record<string, TrackFeatures>];
 
   getLibrary: [None, Library];
@@ -380,13 +432,17 @@ export interface Commands {
   updateSchedule: [{ enabled: boolean }, void];
 
   aiConfig: [None, AiConfig];
+  tgLink: [None, TgLink];
+  tgTracks: [None, TgList];
+  tgImport: [{ track: TgTrack; artwork?: string | null }, Track];
+  tgDelete: [{ id: string }, void];
   serverStatus: [None, ServerStatus];
   serverAuth: [{ login: string; password: string; register?: boolean }, ServerStatus];
   serverLogout: [None, ServerStatus];
   serverSync: [None, ServerStatus];
   serverProxy: [{ on: boolean }, ServerStatus];
   aiConfigure: [{ baseUrl?: string; model?: string; key?: string; enabled?: boolean }, AiConfig];
-  aiChat: [{ messages: AiMessage[]; temperature?: number }, string];
+  aiChat: [{ messages: AiMessage[]; temperature?: number; tier?: 'fast' | 'deep' }, string];
 
   modsList: [None, InstalledMod[]];
   modStage: [{ kind: 'zip' | 'folder' }, StagedMod | null];

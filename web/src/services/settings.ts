@@ -11,6 +11,8 @@ export async function loadSettings(): Promise<void> {
   } catch {
     stored = {};
   }
+  // "neuro" was a separate mode; the model is now part of every mode.
+  if ((stored.waveMode as string) === 'neuro') stored.waveMode = 'mix';
   app.settings.value = { ...defaultSettings, ...stored };
   applyMotion();
 }

@@ -4,11 +4,16 @@ import { app, currentTrack, isPlayable, livePosition, player, type PlayContext }
 import { Wave, type RecoSource } from '../logic/recommend';
 import { hooks, runHooks } from '../mods/registry';
 import { toast } from '../ui/toast';
+import { describeFilters } from '../logic/filters';
+import { songKey } from '../logic/normalize';
 import { aiSuggest } from './ai';
+import { dislikes } from './dislikes';
+import { rememberWave, type SavedWave } from './waves';
 import { related } from './catalog';
 import { vibesOf } from './features';
 import { uiBus } from './events';
 import { busy } from '../core/busy';
+import { preloadArt } from './art';
 
 export const RELEASES_URL = 'https://github.com/Gl1ch5/You-Music/releases/latest';
 
@@ -19,20 +24,36 @@ export const recoSource: RecoSource = {
     likes: app.likes.peek(),
     history: await call('history', { limit: 400 }).catch(() => []),
     now: Date.now(),
+    dislikes: dislikes.peek(),
   }),
   related,
   vibes: vibesOf,
 };
 
 let wave: Wave | null = null;
+/** What the running wave is, to save it for "Продолжить волну". */
+let waveInfo: Omit<SavedWave, 'played' | 'at'> | null = null;
 
-/** Wave for the current mode; "neuro" mixes AI suggestions into the related-video candidates. */
-export function createWave(): Wave {
-  const mode = app.settings.peek().waveMode;
-  if (mode === 'neuro' && app.aiEnabled.peek()) {
-    return new Wave({ ...recoSource, extra: async () => (await aiSuggest(recoSource, 12)).map((p) => p.track) }, 'mix');
-  }
-  return new Wave(recoSource, mode === 'neuro' ? 'mix' : mode);
+/**
+ * Recommendations: related songs of the user's taste, scored by vibe, era and filters — plus, when a model is
+ * available (own or the account's), its suggestions mixed in. Custom text filters can only be understood by the model,
+ * so with them on the wave plays the model's picks only.
+ */
+export function createWave(opts: { seeds?: Track[]; seen?: Track[]; title?: string } = {}): Wave {
+  const s = app.settings.peek();
+  const ai = app.aiEnabled.peek();
+  const custom = ai ? s.recoCustomActive : [];
+  const wish = describeFilters(s.recoFilters, custom);
+  const extra = ai
+    ? async () => (await aiSuggest(recoSource, s.recoDepth === 'deep' ? 14 : 8, { mood: wish || undefined, tier: s.recoDepth, basis: opts.seeds, title: opts.title })).map((p) => p.track)
+    : undefined;
+  return new Wave({ ...recoSource, extra }, s.waveMode, Math.random, null, {
+    filters: s.recoFilters,
+    depth: s.recoDepth,
+    seeds: opts.seeds,
+    seen: opts.seen,
+    extraOnly: custom.length > 0,
+  });
 }
 let extending = false;
 
@@ -45,9 +66,12 @@ export async function playTracks(tracks: Track[], index: number, context: PlayCo
   }
   list = await runHooks(hooks.queue, list, { reason: context?.kind === 'wave' ? 'wave' : 'play' });
   const start = Math.max(0, list.findIndex((t) => t.id === selected?.id));
-  if (context?.kind !== 'wave') wave = null;
+  if (context?.kind !== 'wave') {
+    wave = null;
+    waveInfo = null;
+  }
   player.context.value = context;
-  expectLoading();
+  if (currentTrack.peek()?.id !== selected?.id) expectLoading();
   await call('play', { queue: list, index: start });
 }
 
@@ -80,25 +104,78 @@ export function playWave(): Promise<void> {
 async function startWave(): Promise<void> {
   if (!app.online.peek()) {
     const offline = [...app.likes.peek().map((l) => l.track), ...app.local.peek()].filter(isPlayable);
-    if (!offline.length) return toast('Без сети поток играет скачанное — пока его нет', { icon: 'offline' });
+    if (!offline.length) return toast('Без сети играет скачанное — пока его нет', { icon: 'offline' });
     wave = null;
-    return playTracks(shuffle(offline), 0, { kind: 'wave', title: 'Поток · офлайн' });
+    return playTracks(shuffle(offline), 0, { kind: 'wave', title: 'Рекомендации · офлайн' });
   }
-  wave = createWave();
-  let first = await wave.next(8).catch(() => [] as Track[]);
+  const current = createWave();
+  let first = await current.next(8).catch(() => [] as Track[]);
   first = await runHooks(hooks.recommendations, first, { source: 'wave' });
   if (!first.length) {
+    if (app.settings.peek().recoFilters.length || app.settings.peek().recoCustomActive.length) {
+      return toast('С этими фильтрами ничего не нашлось — уберите часть', { icon: 'filter' });
+    }
     const likes = app.likes.peek().map((l) => l.track);
     if (!likes.length) return toast('Поставьте пару лайков — рекомендациям нужно от чего оттолкнуться', { icon: 'sparkle' });
     first = shuffle(likes).slice(0, 10);
   }
-  const current = wave;
-  await playTracks(first, 0, { kind: 'wave', title: 'Поток рекомендаций' });
+  await playTracks(first, 0, { kind: 'wave', title: 'Рекомендации' });
   wave = current;
+  waveInfo = { id: `reco-${Date.now()}`, title: 'Рекомендации', kind: 'reco' };
+}
+
+/** Wave grown from a playlist (or likes): its songs are the taste, the wave plays new ones like them. */
+export function playListWave(title: string, tracks: Track[]): Promise<void> {
+  return preparing(async () => {
+    if (!app.online.peek()) return toast('Волна по плейлисту работает онлайн', { icon: 'offline' });
+    const seeds = tracks.filter((t) => t.source === 'yt');
+    const current = createWave({ seeds, title });
+    const first = await runHooks(hooks.recommendations, await current.next(8).catch(() => [] as Track[]), { source: 'wave' });
+    if (!first.length) return toast('Похожих треков не нашлось', { icon: 'similar' });
+    const name = `Волна по «${title}»`;
+    await playTracks(first, 0, { kind: 'wave', title: name });
+    wave = current;
+    waveInfo = { id: `list-${title}`, title: name, kind: 'playlist', seeds };
+  });
+}
+
+/** Continues a saved wave: same seeds, nothing it already played. */
+export function resumeWave(saved: SavedWave): Promise<void> {
+  return preparing(async () => {
+    if (!app.online.peek()) return toast('Нужна сеть', { icon: 'offline' });
+    const current =
+      saved.kind === 'track' && saved.seed
+        ? new Wave(recoSource, 'mix', Math.random, saved.seed, { seen: saved.played })
+        : createWave({ seeds: saved.seeds, seen: saved.played, title: saved.title });
+    const first = await runHooks(hooks.recommendations, await current.next(8).catch(() => [] as Track[]), { source: 'wave' });
+    if (!first.length) return toast('Эта волна закончилась — запустите новую', { icon: 'wave' });
+    await playTracks(first, 0, { kind: 'wave', title: saved.title });
+    wave = current;
+    waveInfo = { id: saved.id, title: saved.title, kind: saved.kind, seed: saved.seed, seeds: saved.seeds };
+    saveWave(saved.played);
+  });
+}
+
+/** Rebuilds what comes after the current track with the new filters / mode, keeping the song that plays. */
+export async function restyleWave(): Promise<void> {
+  if (!isWaveActive() || !wave || waveInfo?.kind === 'track') return;
+  const current = createWave({ seeds: waveInfo?.seeds, seen: wave.played(), title: waveInfo?.title });
+  wave = current;
+  const more = await runHooks(hooks.recommendations, await current.next(6).catch(() => [] as Track[]), { source: 'wave' });
+  if (wave !== current) return;
+  await call('queueReplaceUpcoming', { tracks: dedupeAgainstQueue(more, true) });
+}
+
+function saveWave(before: Track[] = []): void {
+  if (!wave || !waveInfo) return;
+  const played = [...before, ...wave.played()];
+  if (played.length >= 3) rememberWave({ ...waveInfo, played, at: Date.now() });
 }
 
 /** Wave grown from one track: the track first, then songs related to it with a similar vibe. */
 export function playTrackWave(seed: Track): Promise<void> {
+  // The seed already plays: the queue changes behind it, nothing to wait for on screen.
+  if (currentTrack.peek()?.id === seed.id) return startTrackWave(seed);
   return busy(startTrackWave(seed));
 }
 
@@ -107,20 +184,34 @@ async function startTrackWave(seed: Track): Promise<void> {
   const current = new Wave(recoSource, 'mix', Math.random, seed);
   wave = current;
   const title = `Волна по «${seed.title}»`;
-  if (currentTrack.peek()?.id === seed.id) {
-    // Already playing: keep it going, just replace what comes after it.
-    player.context.value = { kind: 'wave', title };
-    for (let i = player.queue.peek().length - 1; i > player.index.peek(); i--) await call('queueRemove', { index: i });
-  } else {
-    // Start the seed right away; the rest joins the queue once found.
-    await playTracks([seed], 0, { kind: 'wave', title });
-  }
+  const playing = currentTrack.peek()?.id === seed.id;
+  if (playing) player.context.value = { kind: 'wave', title };
+  // Start the seed right away; the rest joins the queue once found.
+  else await playTracks([seed], 0, { kind: 'wave', title });
   wave = current;
+  waveInfo = { id: `track-${seed.id}`, title, kind: 'track', seed };
   let more = await current.next(8).catch(() => [] as Track[]);
   more = await runHooks(hooks.recommendations, more, { source: 'wave' });
   if (wave !== current) return;
-  if (more.length) await call('queueAdd', { tracks: more });
-  else toast('Похожих треков не нашлось', { icon: 'similar' });
+  if (!more.length) return toast('Похожих треков не нашлось', { icon: 'similar' });
+  // One queue update for everything after the seed: no flicker of removing items one by one.
+  if (playing) await call('queueReplaceUpcoming', { tracks: dedupeAgainstQueue(more, true) });
+  else await call('queueAdd', { tracks: dedupeAgainstQueue(more) });
+}
+
+/** Drops songs already in the queue (any upload of them), so a wave never repeats a track. */
+function dedupeAgainstQueue(tracks: Track[], upToCurrent = false): Track[] {
+  const queue = player.queue.peek();
+  const keep = upToCurrent ? queue.slice(0, player.index.peek() + 1) : queue;
+  const ids = new Set(keep.map((t) => t.id));
+  const keys = new Set(keep.map(songKey));
+  return tracks.filter((t) => {
+    const k = songKey(t);
+    if (ids.has(t.id) || keys.has(k)) return false;
+    ids.add(t.id);
+    keys.add(k);
+    return true;
+  });
 }
 
 export function isWaveActive(): boolean {
@@ -133,8 +224,9 @@ async function extendWave(): Promise<void> {
   try {
     let more = await wave.next(6);
     more = await runHooks(hooks.recommendations, more, { source: 'wave' });
-    more = await runHooks(hooks.queue, more, { reason: 'wave' });
+    more = dedupeAgainstQueue(await runHooks(hooks.queue, more, { reason: 'wave' }));
     if (more.length) await call('queueAdd', { tracks: more });
+    saveWave();
   } catch (e) {
     console.warn('wave extension failed', e);
   } finally {
@@ -153,10 +245,19 @@ export function togglePlay(): void {
   } else playWave();
 }
 
-/** Shows the loading ring right away for actions that will start a new stream. */
+let expectTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Shows the loading ring for actions that will start a new stream — after a short delay, so a downloaded or
+ * cached track that starts at once does not flash it. Skipped when the change already happened by then.
+ */
 export function expectLoading(): void {
   player.wantsPlay.value = true;
-  player.buffering.value = true;
+  const from = currentTrack.peek()?.id;
+  clearTimeout(expectTimer);
+  expectTimer = setTimeout(() => {
+    if (currentTrack.peek()?.id === from && player.wantsPlay.peek()) player.buffering.value = true;
+  }, 200);
 }
 
 export function next(): void {
@@ -207,6 +308,7 @@ export function initPlayback(): void {
   onNative('queueChanged', (q) => {
     player.queue.value = q.queue;
     player.index.value = q.index;
+    preloadArt(q.queue.slice(q.index + 1, q.index + 3));
     uiBus.emit('queueChanged', q);
   });
   onNative('trackChanged', (t) => {
@@ -228,6 +330,13 @@ export function initPlayback(): void {
   });
   uiBus.on('like', ({ track, liked }) => {
     if (liked) wave?.feedback('like', track);
+  });
+  uiBus.on('dislike', ({ track }) => {
+    wave?.feedback('skip', track);
+    if (currentTrack.peek()?.id === track.id && player.index.peek() < player.queue.peek().length - 1) {
+      expectLoading();
+      call('next');
+    }
   });
 }
 

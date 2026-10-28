@@ -33,4 +33,13 @@ describe('prompt', () => {
     expect(msgs[1].content).toContain('Ottawan — D.I.S.C.O.');
     expect(msgs[1].content).toContain('10 песен');
   });
+
+  it('passes the era and the wishes', () => {
+    const taste = summarizeTaste({ likes: [{ track: t('A', 'B'), likedAt: 1 }], history: [], now: 10 });
+    const msgs = buildAiPrompt(taste, { count: 5, exclude: [], mood: 'без слов', year: 2026, era: { year: 2025, spread: 2 } });
+    expect(msgs[1].content).toContain('2023–2027');
+    expect(msgs[1].content).toContain('свежую музыку');
+    expect(msgs[1].content).toContain('Пожелания: без слов');
+    expect(msgs[0].content).toContain('2026');
+  });
 });

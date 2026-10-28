@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Track } from '../bridge/contract';
-import { artistKey, cleanTitle, normalizeTrack, songKey, versionTags } from './normalize';
+import { artistKey, cleanTitle, normalizeTrack, songKey, splitArtists, versionTags } from './normalize';
 
 const yt = (title: string, artist: string, extra: Partial<Track> = {}): Track => ({
   id: `yt:${title}`,
@@ -70,5 +70,13 @@ describe('versions', () => {
   it('keys artists by the first credit', () => {
     expect(artistKey('MORGENSHTERN, Элджей')).toBe('morgenshtern');
     expect(artistKey('Jiandro & Wbenix')).toBe('jiandro');
+  });
+});
+
+describe('splitArtists', () => {
+  it('splits credits', () => {
+    expect(splitArtists('Elgy, MORGENSHTERN & Xcho feat. Kai')).toEqual(['Elgy', 'MORGENSHTERN', 'Xcho', 'Kai']);
+    expect(splitArtists('Macan x Jah Khalib')).toEqual(['Macan', 'Jah Khalib']);
+    expect(splitArtists('IOWA - Topic')).toEqual(['IOWA']);
   });
 });

@@ -16,8 +16,10 @@ android/                 Kotlin, AGP 9 (встроенный Kotlin), Gradle wra
     MainActivity.kt      WebView, WebViewAssetLoader, ActivityHost (пикеры, haptics, share), список BridgeModule
     bridge/              BridgeHost (WebMessageListener), CommandRegistry, EventBus, modules/* — команды по доменам
     player/              PlaybackService (Media3), PlayerController (MediaController), PlaybackDataSource (скачанное → кэш → YouTube),
-                         ChunkedDataSource (поток короткими range-запросами + перезапрос URL на 403), StreamPrefetcher, FadeController (плавные переходы), PlaybackHistoryTracker
-    source/              YouTubeRepository, StreamResolver, ImportRepository (Spotify/Яндекс), LyricsRepository (LRCLIB),
+                         ChunkedDataSource (поток короткими range-запросами + перезапрос URL на 403), StreamPrefetcher, FadeController (плавные переходы, равная мощность, ограничение скорости),
+                         PlaybackHistoryTracker, TrackInfo (TrackInfoReader: кодек/битрейт/размер для «О треке»)
+    source/              YouTubeRepository, StreamResolver, ImportRepository (Spotify/Яндекс, чарт Яндекса), LyricsRepository (LRCLIB, точный → поиск),
+                         Translator (перевод текста, Google gtx через Http.client),
                          FeaturesRepository (Deezer: BPM/громкость/жанры для рекомендаций, кэш features.json), Errors (коды ошибок)
     data/                Room (Entities, Daos, AppDatabase), LibraryRepository, KeyValueStore (настройки/темы/моды UI), AppPaths,
                          BackupManager (полная копия: библиотека + история + kv без ключа AI; автокопия в папку SAF)
@@ -27,7 +29,8 @@ android/                 Kotlin, AGP 9 (встроенный Kotlin), Gradle wra
     update/              UpdateManager (version.json из GitHub Releases, PackageInstaller), UpdateWorker (фон, 15 мин)
     ai/                  AiClient — OpenAI-совместимый chat/completions; ключ хранится только нативно; AiFallback — нейросеть аккаунта, если своя выключена
     cloud/               ServerClient — необязательный аккаунт на https://grzxk.ru/youmusic: вход, синхронизация (backupExport/merge-import), AI с лимитом, прокси;
-                         токен и данные прокси — в отдельных SharedPreferences "server" (не в kv, не попадают в копию)
+                         токен и данные прокси — в отдельных SharedPreferences "server" (не в kv, не попадают в копию);
+                         TelegramImporter — файлы от бота → files/telegram, `local:tg-…`, обложка: Telegram → найденный трек → сгенерированная
     system/              ProgressNotifications (уведомления: загрузка новой версии, скачивание музыки), ActivityHost,
                          AppIcons (иконка лаунчера: activity-alias Icon01…Icon20 + IconClassic в манифесте, включён ровно один)
     local/, mods/, art/
@@ -38,15 +41,17 @@ web/                     TypeScript + Vite, без фреймворков
   src/core/              signal.ts (реактивность), dom.ts (h(), иконки, форматтеры), store.ts (глобальное состояние), bus.ts
   src/design/            tokens.css, base.css, components.css, icons.ts (SVG-спрайт), noise.png
   src/theme/             темы (builtin.ts, engine.ts, types.ts)
-  src/logic/             чистая логика с тестами: normalize, rank, recommend (волна), features (вайб трека), match (перенос), ai (промпт и разбор ответа)
+  src/logic/             чистая логика с тестами: normalize, rank, recommend (волна), features (вайб и эпоха), filters (фильтры рекомендаций), match (перенос), ai (промпт и разбор ответа)
   src/services/          catalog (+findTrack), library (+скачать лайки/избранное), playback (+волна, createWave, playTrackWave), features (вайбы через trackFeatures),
+                         dislikes («Не нравится», kv reco.dislikes), waves (сохранённые потоки, kv wave.sessions),
                          backup (экспорт/импорт всего, автокопия, предложение восстановить), ai, updates (OTA, проверка раз в минуту), deeplink (youmusic://), settings, art, events (uiBus для модов)
-  src/ui/                компоненты, шторки, виртуальный список, меню трека, hero, artistLink (клик по исполнителю), onboarding (первый запуск)
+  src/ui/                компоненты, шторки, виртуальный список, меню трека (+ shareTrack), trackInfo («О треке»), hero, artistLink (каждый исполнитель — ссылка), onboarding (первый запуск)
   src/screens/           экраны; каждый регистрируется через defineRoute() и импортируется в main.ts
   src/player/            mini.ts, full.ts
   src/mods/              registry (слоты/хуки), api (window.app.mod), host (загрузка, разрешения, изоляция ошибок)
   scripts/               screenshots.mjs, mods-check.mjs (Playwright + mock)
-server/                  Node 22 без зависимостей: аккаунты (scrypt), синхронизация, /api/ai/chat (50 в день), HTTP CONNECT-прокси (только 80/443, не в частные сети);
+server/                  Node 22 без зависимостей: аккаунты (scrypt), синхронизация, /api/ai/chat (50 в день, tier fast/deep), HTTP CONNECT-прокси (только 80/443, не в частные сети),
+                         Telegram-бот (long polling, /api/tg/*), страницы: сайт со статистикой, /terms, /t/<id> (поделиться);
                          deploy/ (systemd, nginx, env.example). Секреты — только в /opt/youmusic-server/.env на сервере
 docs/                    bridge.md (контракт), mods.md (API модов), screenshots/, icon.svg (иконка)
 examples/mods/           sleep-timer, clean-versions
@@ -89,7 +94,9 @@ cd ../android
 13. **Сеть.** Все HTTP-запросы — через `Http.client` / `Http.callFactory`, тогда работают прокси. При смене маршрута (VPN, прокси, сеть) URL потоков сбрасываются: они привязаны к IP.
 14. **Данные пользователя не должны теряться.** Новое долговременное состояние кладите в БД или kv — тогда оно попадёт в полную копию (`BackupManager`) и системный бэкап (`res/xml/*backup*`). Ключи `backup.*` в kv в копию не входят; секреты (ключ AI) из копии вырезаются.
 15. **Данные треков (Deezer)** — только для рекомендаций, в плеере их не показываем.
-16. **Глубокие ссылки** `youmusic://socks|http|proxy|ai|updates` — обработка в `services/deeplink.ts`, новые типы описывать в README.
+16. **Глубокие ссылки** `youmusic://socks|http|proxy|ai|updates|track` и `https://grzxk.ru/youmusic/t/<id>` — обработка в `services/deeplink.ts`, новые типы описывать в README.
+20. **Термины.** В интерфейсе — «Рекомендации», «Волна по треку/плейлисту», «нейросеть»; слова «нейро-…» и режима «Нейро» нет: нейросеть — часть любого режима. Своя нейросеть/свой прокси имеют приоритет над серверными.
+21. **Токен Telegram-бота** — только `TELEGRAM_BOT_TOKEN` в `/opt/youmusic-server/.env`; в репозитории и `env.example` — пустой ключ.
 17. **Клики сквозь слои.** Всё, что прячет оверлей жестом (плеер, шторки), вызывает `swallowNextClick()` из `core/dom.ts`. Вокруг мини-плеера — прозрачная `.mini-shield`.
 18. **Загрузка видна всегда.** Действие пользователя, которое ждёт сеть, оборачивайте в `busy()` (`core/busy.ts`, полоска сверху) или показывайте скелетон; запуск потока — `player.preparing`.
 19. **Сервер необязателен.** Без аккаунта всё работает как раньше. Секреты сервера (ключ и модель нейросети) — только в env на сервере, в репозиторий и APK не попадают.
@@ -115,3 +122,4 @@ cd ../android
 | 2026-10-28 | Уведомления о прогрессе (`system/ProgressNotifications`, канал `progress`): загрузка новой версии и очередь скачивания музыки; слушают `UpdateManager.onState` и `DownloadRepository.onProgress`. |
 | 2026-10-28 | Исправлена перемотка: ползунок отдавал дробные мс, а `seek` ждал `Long` — команда падала молча. Веб округляет, `SeekArgs.positionMs` теперь `Double`. |
 | 2026-10-28 | Выбор иконки приложения (20 из пакета дизайнера, «Светлые/Тёмные», по умолчанию 10; `appIconGet/appIconSet`, `system/AppIcons`, экран `appIcon`). Правки по дизайн-ревью: в «Коллекции» вместо кнопок «Скачать лайки/избранное» — иконка в строке «Мне нравится» (кнопки остались в «Скачанном»), «История» показывает прослушанное сегодня; мини-плеер светлее, с тенью (`--shadow-mini`) и заметной полоской прогресса; в истории поиска «×» удаляет запрос, «Очистить» — текстовая кнопка (`.text-btn`); режим рекомендаций — в баннере «Слушать поток»; названия в сетке — 2 строки (`.clamp-2`); иконка настроек — шестерёнка (`settings`), ползунки — `tune`; «Скачано» — галочка; ползунок перемотки крупнее, всегда виден и отодвинут от края экрана (жест «назад»). |
+| 2026-10-28 | Рекомендации без режима «Нейро»: нейросеть — часть любого режима (`aiSuggest` с tier fast/deep, эпоха и текущий год в промпте), фильтры (`logic/filters.ts`, свои словами), учёт эпохи (`eraOf`), «Не нравится» (`services/dislikes.ts`), «Продолжить волну» (`services/waves.ts`), волна по плейлисту, пересборка очереди без мерцания (`queueReplaceUpcoming`), «Чарт» (`chart`), «Быстрее/Тщательнее» в настройках. Плеер: строка текста поверх обложки, перевод (`translate`), «О треке» (`trackInfo`), дизлайк, ссылки на всех исполнителей, без перерисовки при смене очереди, предзагрузка обложек; плавнее затухание; точнее поиск текстов; обложки Яндекса при переносе и точнее сопоставление. Поделиться — ссылка `grzxk.ru/youmusic/t/<id>` (+ intent-filter, `youmusic://track`). Перенос из Telegram (бот, `tgLink/tgTracks/tgImport/tgDelete`, `cloud/TelegramImporter`). Сервер: tier моделей, `/api/stats`, сайт, соглашение, страница трека. Полоска загрузки появляется с задержкой и тише. |

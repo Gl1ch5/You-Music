@@ -40,6 +40,10 @@ data class TrackFeaturesDto(
     val genres: List<String> = emptyList(),
     val explicit: Boolean = false,
     val year: Int? = null,
+    /** Deezer popularity (higher = more popular), used by the "Популярное" filter. */
+    val rank: Long? = null,
+    /** Album cover 1000×1000, a better picture for tracks whose YouTube thumbnail is poor. */
+    val cover: String? = null,
 )
 
 /**
@@ -115,6 +119,8 @@ class FeaturesRepository(private val file: File) {
             genres = genres,
             explicit = (track["explicit_lyrics"] as? JsonPrimitive)?.booleanOrNull ?: false,
             year = (track["release_date"] as? JsonPrimitive)?.contentOrNull?.take(4)?.toIntOrNull(),
+            rank = track["rank"].long(),
+            cover = ((album?.get("cover_xl") ?: (track["album"] as? JsonObject)?.get("cover_xl")) as? JsonPrimitive)?.contentOrNull,
         )
     }
 

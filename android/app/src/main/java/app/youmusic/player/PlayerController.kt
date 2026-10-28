@@ -79,6 +79,13 @@ class PlayerController(
         }
     }
 
+    /** Swaps everything after the current track in one go, so the UI gets a single queue update instead of a flicker per item. */
+    suspend fun replaceUpcoming(tracks: List<TrackDto>) = withPlayer { p ->
+        val from = p.currentMediaItemIndex + 1
+        if (from < p.mediaItemCount) p.removeMediaItems(from, p.mediaItemCount)
+        if (tracks.isNotEmpty()) p.addMediaItems(tracks.map { it.toMediaItem(paths) })
+    }
+
     suspend fun state(): PlayerStateDto = withPlayer { p ->
         PlayerStateDto(
             queue = p.queue(),

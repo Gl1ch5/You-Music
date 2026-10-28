@@ -17,6 +17,23 @@ describe('bestMatch', () => {
     expect(bestMatch(src, cands)?.id).toBe('s');
   });
 
+  it('does not take the same title by another artist', () => {
+    const src = { title: 'Маршрутка', artist: 'IOWA', durationMs: 191_000 };
+    expect(bestMatch(src, [t('other', 'Маршрутка', 'Ленинград', 230)])).toBeNull();
+    expect(bestMatch(src, [t('other', 'Маршрутка', 'Ленинград', 230), t('ok', 'IOWA - Маршрутка', 'IOWA', 192)])?.id).toBe('ok');
+  });
+
+  it('prefers the exact title over a longer one', () => {
+    const src = { title: 'Love', artist: 'Lana Del Rey', durationMs: 272_000 };
+    const cands = [t('long', 'Love Song', 'Lana Del Rey', 300), t('exact', 'Love', 'Lana Del Rey', 272)];
+    expect(bestMatch(src, cands)?.id).toBe('exact');
+  });
+
+  it('matches transliterated artists', () => {
+    const src = { title: 'Сансара', artist: 'Баста', durationMs: 280_000 };
+    expect(bestMatch(src, [t('b', 'Сансара', 'Basta', 281)])?.id).toBe('b');
+  });
+
   it('returns null when nothing is close', () => {
     expect(bestMatch({ title: 'Toscana', artist: 'Alessandra', durationMs: 170_000 }, [t('x', 'Completely Different', 'Nobody', 400)])).toBeNull();
   });

@@ -172,6 +172,10 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     queue = next ? [...queue.slice(0, index + 1), ...t, ...queue.slice(index + 1)] : [...queue, ...t];
     emit('queueChanged', { queue, index });
   },
+  queueReplaceUpcoming: ({ tracks: t }) => {
+    queue = [...queue.slice(0, index + 1), ...t];
+    emit('queueChanged', { queue, index });
+  },
   queueRemove: ({ index: i }) => {
     queue = queue.filter((_, j) => j !== i);
     if (i < index) index--;
@@ -196,6 +200,7 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     shuffle = enabled;
     state();
   },
+  trackInfo: ({ track }) => ({ source: downloads.has(track.id) ? 'download' : 'stream', container: 'webm', codec: 'Opus', bitrateKbps: 160, sampleRateHz: 48000, channels: 2, sizeBytes: Math.round((track.durationMs / 1000) * 20_000) }),
   getPlayerState: () => ({ queue, index, playing, buffering: false, positionMs: position, durationMs: queue[index]?.durationMs ?? 0, repeat, shuffle }),
 
   search: ({ query, filter }) => {
@@ -227,6 +232,8 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     };
   },
   lyrics: () => ({ synced: Array.from({ length: 24 }, (_, i) => `[00:${String(i * 4).padStart(2, '0')}.00] ${['Ночной город дышит светом', 'Мы едем вдоль пустых витрин', 'И музыка звучит как ветер', 'Который знает, что ты один'][i % 4]}`).join('\n') }),
+  translate: ({ lines }) => ({ lines: lines.map((l) => (l ? `${l} (перевод)` : '')), from: 'en' }),
+  chart: () => ({ title: 'Чарт Яндекс Музыки', source: 'yandex', tracks: tracks.slice(0, 12).map((t) => ({ title: t.title, artist: t.artist, durationMs: t.durationMs, artwork: t.artwork })) }),
   importFetch: () => ({
     title: 'Мой плейлист из Spotify',
     source: 'spotify',
@@ -234,7 +241,7 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
   }),
   trackFeatures: ({ tracks: list }) =>
     Object.fromEntries(
-      list.map((t, i) => [t.id, { found: true, bpm: 80 + ((t.title.length * 13 + i * 7) % 90), gainDb: -4 - ((t.artist.length * 3) % 10), genres: [['Pop', 'Rap/Hip Hop', 'Rock', 'Electro', 'Metal'][t.title.length % 5]], explicit: t.title.length % 3 === 0 }]),
+      list.map((t, i) => [t.id, { found: true, bpm: 80 + ((t.title.length * 13 + i * 7) % 90), gainDb: -4 - ((t.artist.length * 3) % 10), genres: [['Pop', 'Rap/Hip Hop', 'Rock', 'Electro', 'Metal'][t.title.length % 5]], explicit: t.title.length % 3 === 0, year: 2000 + ((t.title.length * 7) % 26), rank: 100_000 * ((t.artist.length * 11) % 10) }]),
     ),
   artworkPalette: ({ url }) => {
     const i = tracks.findIndex((t) => t.artwork === url);
@@ -326,6 +333,17 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
   serverLogout: () => (mockServer = { ...mockServer, signedIn: false, login: null, proxyOn: false }),
   serverSync: () => (mockServer = { ...mockServer, syncedAt: Date.now() }),
   serverProxy: ({ on }) => (mockServer = { ...mockServer, proxyOn: on }),
+  tgLink: () => ({ code: 'demo', url: 'https://t.me/Youmusikks_bot?start=demo', linked: false }),
+  tgTracks: () => ({
+    linked: true,
+    bot: 'Youmusikks_bot',
+    tracks: [
+      { id: 'tg-demo-1', title: 'Night Drive', artist: 'Demo Artist', durationMs: 201_000, size: 4_800_000, mime: 'audio/mpeg', cover: null, at: Date.now() },
+      { id: 'tg-demo-2', title: 'Редкая запись', artist: 'Неизвестный', durationMs: 185_000, size: 4_100_000, mime: 'audio/mpeg', cover: null, at: Date.now() },
+    ],
+  }),
+  tgImport: ({ track }) => ({ id: `local:tg-${track.id}`, source: 'local', title: track.title, artist: track.artist, durationMs: track.durationMs }),
+  tgDelete: () => undefined,
   aiConfig: () => ({ baseUrl: 'https://api.example.com/v1', model: 'demo-model', enabled: true, hasKey: true }),
   aiConfigure: () => ({ baseUrl: 'https://api.example.com/v1', model: 'demo-model', enabled: true, hasKey: true }),
   aiChat: () => JSON.stringify(tracks.slice(14, 20).map((t) => ({ artist: t.artist, title: t.title, reason: 'похоже на ваши лайки' }))),

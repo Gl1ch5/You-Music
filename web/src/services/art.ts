@@ -29,3 +29,19 @@ export function resize(url: string, px: number): string {
   }
   return url;
 }
+
+const warmed = new Set<string>();
+
+/** Fetches covers of the upcoming tracks ahead of time, so the player and the mini player switch without a blank. */
+export function preloadArt(tracks: Track[]): void {
+  for (const t of tracks) {
+    for (const url of [artFor(t, 'lg')[0], artFor(t, 'sm')[0]]) {
+      if (!url || warmed.has(url)) continue;
+      warmed.add(url);
+      if (warmed.size > 200) warmed.delete(warmed.values().next().value!);
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = url;
+    }
+  }
+}

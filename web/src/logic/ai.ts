@@ -3,9 +3,9 @@ import { artistKey } from './normalize';
 import type { RecoSignals } from './recommend';
 
 /**
- * "Neuro" recommendations: a compact taste profile goes to an OpenAI-compatible model, which answers with
- * a JSON list of songs. Songs are then matched on YouTube like any import. Only artist/title text is sent —
- * no account data, no identifiers.
+ * The model's part of hybrid recommendations: a compact taste profile goes to an OpenAI-compatible model, which
+ * answers with a JSON list of songs. Songs are then matched on YouTube like any import. Only artist/title text
+ * (and the years the user listens to) is sent — no account data, no identifiers.
  */
 
 export interface TasteSummary {
@@ -41,19 +41,41 @@ export function summarizeTaste({ likes, history }: RecoSignals): TasteSummary {
   };
 }
 
-export function buildAiPrompt(taste: TasteSummary, opts: { count: number; exclude: string[]; mood?: string }): AiMessage[] {
+export interface PromptOptions {
+  count: number;
+  exclude: string[];
+  /** The user's wishes: active filters and their own words ("без слов; грустное"). */
+  mood?: string;
+  /** Current year, to know what "new" and "trending" mean. */
+  year?: number;
+  /** Years the user mostly listens to. */
+  era?: { year: number; spread: number } | null;
+  /** The taste comes from one playlist with this name, not from the whole library. */
+  playlist?: string;
+}
+
+export function buildAiPrompt(taste: TasteSummary, opts: PromptOptions): AiMessage[] {
+  const year = opts.year ?? new Date().getFullYear();
   const system =
     'Ты музыкальный куратор. Подбираешь реальные существующие песни, которые есть на YouTube. ' +
     'Отвечай ТОЛЬКО JSON-массивом без пояснений вокруг: [{"artist":"...","title":"...","reason":"до 8 слов по-русски"}]. ' +
     'Не повторяй песни из списков пользователя. Не больше двух песен одного исполнителя. ' +
-    'Смешивай любимых исполнителей пользователя с новыми похожими. Только оригинальные версии, без remix/slowed/sped up, если пользователь их не любит.';
+    'Смешивай любимых исполнителей пользователя с новыми похожими. Только оригинальные версии, без remix/slowed/sped up, если пользователь их не любит. ' +
+    `Сейчас ${year} год: учитывай, что сейчас актуально и в тренде у слушателей такого вкуса. ` +
+    'Держись эпохи пользователя: кто слушает новую музыку — не предлагай старые хиты; кто слушает старое — не навязывай свежие тренды. ' +
+    'Пожелания пользователя (если есть) обязательны для каждой песни.';
+  const era = opts.era
+    ? `Пользователь в основном слушает песни ${Math.round(opts.era.year - opts.era.spread)}–${Math.round(opts.era.year + opts.era.spread)} годов${opts.era.year >= year - 3 ? ' — свежую музыку' : ''}.`
+    : '';
   const parts = [
+    opts.playlist ? `Подбирай по плейлисту «${opts.playlist}» — его песни ниже вместо лайков.` : '',
     `Любимые исполнители: ${taste.topArtists.join(', ') || 'нет данных'}.`,
+    era,
     taste.liked.length ? `Лайкнутые треки:\n${taste.liked.join('\n')}` : '',
     taste.recent.length ? `Недавно дослушал:\n${taste.recent.join('\n')}` : '',
     taste.skippedArtists.length ? `Часто пропускает: ${taste.skippedArtists.join(', ')}.` : '',
     opts.exclude.length ? `Уже предлагали, не повторяй:\n${opts.exclude.slice(-60).join('\n')}` : '',
-    opts.mood ? `Настроение: ${opts.mood}.` : '',
+    opts.mood ? `Пожелания: ${opts.mood}.` : '',
     `Предложи ${opts.count} песен.`,
   ];
   return [

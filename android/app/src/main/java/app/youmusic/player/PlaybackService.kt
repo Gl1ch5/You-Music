@@ -63,6 +63,16 @@ class PlaybackService : MediaSessionService() {
         val prefetcher = StreamPrefetcher(player, graph.resolver, graph.downloads, graph.network, graph.appScope)
         player.addListener(prefetcher)
         fade = FadeController(player, graph.kv, graph.appScope)
+        player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onAudioInputFormatChanged(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                format: androidx.media3.common.Format,
+                decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?,
+            ) {
+                NowPlayingFormat.mediaId = player.currentMediaItem?.mediaId
+                NowPlayingFormat.format = format
+            }
+        })
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 val mapped = (error.cause ?: error).toBridgeException()

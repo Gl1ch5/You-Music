@@ -2,12 +2,15 @@ import { navigate } from '../app/router';
 import { call, onNative } from '../bridge/bridge';
 import { confirmSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
+import { busy } from '../core/busy';
 import { refreshAiConfig } from './ai';
+import { playTracks } from './playback';
 
 /**
  * youmusic:// links:
  *   youmusic://socks?server=H&port=P&user=U&pass=X   youmusic://http?…   youmusic://proxy?url=<socks5://…>
  *   youmusic://ai?base=<url>&model=<id>&key=<key>      youmusic://updates
+ *   youmusic://track?id=<videoId>   https://grzxk.ru/youmusic/t/<videoId> — a shared track
  */
 export async function handleDeepLink(raw: string): Promise<void> {
   let url: URL;
@@ -16,8 +19,16 @@ export async function handleDeepLink(raw: string): Promise<void> {
   } catch {
     return;
   }
-  const kind = url.hostname || url.pathname.replace(/^\/+/, '').split('/')[0];
   const q = url.searchParams;
+  if (url.protocol === 'https:') {
+    const id = url.pathname.match(/\/t\/([\w-]{6,20})/)?.[1];
+    return id ? openSharedTrack(id) : undefined;
+  }
+  const kind = url.hostname || url.pathname.replace(/^\/+/, '').split('/')[0];
+  if (kind === 'track') {
+    const id = q.get('id');
+    return id ? openSharedTrack(id.replace(/^yt:/, '')) : undefined;
+  }
   if (kind === 'socks' || kind === 'http' || kind === 'proxy') {
     const where = kind === 'proxy' ? q.get('url') ?? '' : `${q.get('server')}:${q.get('port')}`;
     if (!(await confirmSheet({ title: 'Добавить прокси?', text: where, ok: 'Добавить и включить' }))) return;
@@ -37,12 +48,21 @@ export async function handleDeepLink(raw: string): Promise<void> {
     if (!(await confirmSheet({ title: 'Подключить нейросеть?', text: `${model}\n${base}`, ok: 'Подключить' }))) return;
     await call('aiConfigure', { baseUrl: base, model, key: q.get('key') ?? undefined, enabled: true });
     await refreshAiConfig();
-    toast('Нейро-рекомендации включены', { icon: 'sparkle' });
+    toast('Нейросеть подключена к рекомендациям', { icon: 'sparkle' });
     navigate('ai');
   } else if (kind === 'updates') {
     navigate('updates');
   } else {
     toast('Неизвестная ссылка', { icon: 'alert' });
+  }
+}
+
+async function openSharedTrack(videoId: string): Promise<void> {
+  try {
+    const details = await busy(call('trackDetails', { id: `yt:${videoId}` }));
+    await playTracks([details.track], 0, { kind: 'list', title: 'По ссылке' });
+  } catch (e) {
+    toast(`Не удалось открыть трек: ${(e as Error).message}`, { icon: 'alert' });
   }
 }
 

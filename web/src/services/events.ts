@@ -8,6 +8,7 @@ export interface UiEvents {
   queueChanged: { queue: Track[]; index: number };
   progress: NativeEvents['progress'];
   like: { track: Track; liked: boolean };
+  dislike: { track: Track };
   skip: { track: Track; positionMs: number };
   screen: { route: string };
   online: { online: boolean };

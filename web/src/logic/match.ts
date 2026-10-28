@@ -1,35 +1,60 @@
 import type { ImportedTrack, Track } from '../bridge/contract';
-import { artistKey, cleanTitle, normalizeQuery, versionTags } from './normalize';
+import { cleanTitle, normalizeQuery, splitArtists, versionTags } from './normalize';
 
 /**
  * Matching tracks from other services (Spotify, Yandex Music, text lists) to YouTube search results.
  * Title similarity weighs most, then artist, then duration; a version mismatch (remix vs original) is penalised.
  */
 
-const MIN_SCORE = 0.5;
+const MIN_SCORE = 0.55;
+
+const TRANSLIT: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p',
+  р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+
+/** Cyrillic → Latin, so "Баста" and "Basta" compare equal. */
+export function translit(s: string): string {
+  return s.toLowerCase().replace(/[а-яё]/g, (c) => TRANSLIT[c] ?? c);
+}
 
 function tokens(s: string): Set<string> {
   return new Set(normalizeQuery(s));
 }
 
-function overlap(a: Set<string>, b: Set<string>): number {
+/** Dice coefficient: "Love" vs "Love Story" is 0.67, not a perfect match. */
+function similarity(a: Set<string>, b: Set<string>): number {
   if (!a.size || !b.size) return 0;
   let common = 0;
   a.forEach((t) => b.has(t) && common++);
-  return common / Math.min(a.size, b.size);
+  return (2 * common) / (a.size + b.size);
+}
+
+const squash = (s: string) => translit(s).replace(/[^\p{L}\p{N}]+/gu, '');
+
+/** 1 when one of the source artists is credited on the candidate (in its artist line or title), else token overlap. */
+function artistSimilarity(src: ImportedTrack, cand: Track): number {
+  const srcArtists = splitArtists(src.artist).map(squash).filter((a) => a.length >= 2);
+  if (!srcArtists.length) return 0.5;
+  const credited = squash(`${cand.artist} ${cand.title}`);
+  if (srcArtists.some((a) => credited.includes(a))) return 1;
+  const candArtists = splitArtists(cand.artist).map(squash);
+  if (candArtists.some((c) => c.length >= 3 && srcArtists.some((a) => a.includes(c)))) return 0.9;
+  return similarity(tokens(translit(src.artist)), tokens(translit(cand.artist))) * 0.8;
 }
 
 export function matchScore(src: ImportedTrack, cand: Track): number {
-  const srcTitle = tokens(cleanTitle(src.title).replace(/\(.*?\)/g, ''));
-  const candTitle = tokens(cand.title.replace(/\(.*?\)/g, ''));
-  const titleSim = overlap(srcTitle, candTitle);
-  const srcArtists = src.artist.split(/\s*(?:,|&|feat\.?|ft\.?)\s*/i).map(artistKey).filter(Boolean);
-  const candArtist = `${artistKey(cand.artist)} ${normalizeQuery(cand.artist).join(' ')}`;
-  const artistSim = srcArtists.length ? (srcArtists.some((a) => candArtist.includes(a)) ? 1 : overlap(tokens(src.artist), tokens(cand.artist))) : 0.5;
+  const srcTitle = tokens(translit(cleanTitle(src.title).replace(/\(.*?\)/g, '')));
+  const candTitle = tokens(translit(cand.title.replace(/\(.*?\)/g, '')));
+  const titleSim = similarity(srcTitle, candTitle);
+  const artistSim = artistSimilarity(src, cand);
   const durSim = src.durationMs > 0 && cand.durationMs > 0 ? Math.max(0, 1 - Math.abs(src.durationMs - cand.durationMs) / 30_000) : 0.5;
   const srcVersions = versionTags(src.title).join();
   const versionPenalty = srcVersions !== versionTags(cand.title).join() ? 0.25 : 0;
-  return 0.5 * titleSim + 0.3 * artistSim + 0.2 * durSim + (cand.official ? 0.05 : 0) - versionPenalty;
+  // Same title by somebody else (covers, namesakes) is the classic wrong match: without the artist it needs a
+  // near-identical length to pass.
+  const strangerPenalty = artistSim < 0.5 && !(titleSim === 1 && durSim > 0.9) ? 0.35 : 0;
+  return 0.45 * titleSim + 0.35 * artistSim + 0.2 * durSim + (cand.official ? 0.05 : 0) - versionPenalty - strangerPenalty;
 }
 
 export function bestMatch(src: ImportedTrack, candidates: Track[]): Track | null {

@@ -1,4 +1,5 @@
 import type { Download, Insets, Like, Playlist, RepeatMode, Track, UpdateState } from '../bridge/contract';
+import type { RecoFilter } from '../logic/filters';
 import { computed, signal } from './signal';
 
 /** Global UI state. Native is the source of truth; these signals mirror it via bridge events. */
@@ -10,7 +11,13 @@ export interface Settings {
   cacheLimitMb: number;
   themeId: string;
   motion: 'system' | 'reduced' | 'full';
-  waveMode: 'mix' | 'familiar' | 'discover' | 'neuro';
+  waveMode: 'mix' | 'familiar' | 'discover';
+  /** Fast: fewer lookups and the quick model; deep: more candidates checked and the stronger model. */
+  recoDepth: 'fast' | 'deep';
+  recoFilters: RecoFilter[];
+  /** The user's own filters in words ("грустное", "для бега"); only the model can follow them. */
+  recoCustom: string[];
+  recoCustomActive: string[];
   hideVersionsInSearch: boolean;
   autoDownloadLiked: boolean;
   crossfadeSec: number;
@@ -27,6 +34,10 @@ export const defaultSettings: Settings = {
   themeId: 'graphite',
   motion: 'system',
   waveMode: 'mix',
+  recoDepth: 'fast',
+  recoFilters: [],
+  recoCustom: [],
+  recoCustomActive: [],
   hideVersionsInSearch: false,
   autoDownloadLiked: true,
   crossfadeSec: 4,

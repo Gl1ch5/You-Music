@@ -99,15 +99,15 @@ class MainActivity : ComponentActivity(), ActivityHost {
         val registry = CommandRegistry()
         listOf(
             SystemModule(applicationContext, graph.kv, graph.network, this, graph.appIcons),
-            PlayerModule(graph.player),
-            CatalogModule(graph.youtube, graph.lyrics, graph.artwork, graph.importer, graph.features),
+            PlayerModule(graph.player, graph.trackInfo),
+            CatalogModule(graph.youtube, graph.lyrics, graph.artwork, graph.importer, graph.features, graph.translator),
             LibraryModule(graph.library, graph.downloads),
             OfflineModule(graph.downloads, graph.local, graph.mediaCache, graph.paths, graph.kv, this),
             ModsModule(graph.mods, this),
             NetModule(applicationContext, graph.proxies, graph.updates),
             AiModule(graph.ai),
             BackupModule(graph.backup, this),
-            ServerModule(graph.server),
+            ServerModule(graph.server, graph.telegram),
         ).forEach { it.register(registry) }
 
         val bridge = BridgeHost(lifecycleScope, registry)
@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity(), ActivityHost {
 
     /** youmusic:// links are kept until the UI asks for them (it may still be loading) and also pushed as an event. */
     private fun handleDeepLink(intent: Intent?) {
-        val data = intent?.data?.takeIf { it.scheme == "youmusic" } ?: return
+        val data = intent?.data?.takeIf { it.scheme == "youmusic" || (it.host == "grzxk.ru" && it.path.orEmpty().startsWith("/youmusic/t/")) } ?: return
         pendingDeepLink = data.toString()
         EventBus.emit("deepLink", DeepLinkDto(data.toString()))
     }

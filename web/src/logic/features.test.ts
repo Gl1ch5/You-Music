@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { averageVibe, genreAggression, vibeBonus, vibeDistance, vibeOf } from './features';
+import { averageVibe, eraOf, eraPenalty, genreAggression, vibeBonus, vibeDistance, vibeOf } from './features';
 
 describe('vibeOf', () => {
   it('is null for unknown songs', () => {
@@ -13,7 +13,7 @@ describe('vibeOf', () => {
     expect(metal.aggression).toBeGreaterThan(0.75);
     expect(jazz.aggression).toBeLessThan(0.3);
     expect(metal.energy).toBeGreaterThan(jazz.energy);
-    for (const v of Object.values(metal)) expect(v).toBeLessThanOrEqual(1);
+    for (const v of [metal.energy, metal.aggression, metal.tempo, metal.dance]) expect(v).toBeLessThanOrEqual(1);
   });
 
   it('maps genres', () => {
@@ -36,5 +36,16 @@ describe('vibe math', () => {
     expect(vibeBonus(a, a, 1)).toBe(1);
     expect(vibeBonus(b, a, 1)).toBeLessThan(0);
     expect(vibeBonus(null, a, 1)).toBe(0);
+  });
+});
+
+describe('era', () => {
+  const v = (year: number) => ({ energy: 0.5, aggression: 0.5, tempo: 0.5, dance: 0.5, year });
+  it('finds the years the user listens to and pushes far songs down', () => {
+    const era = eraOf([2023, 2024, 2024, 2025, 2025, 2026].map(v))!;
+    expect(era.year).toBeGreaterThanOrEqual(2024);
+    expect(eraPenalty(v(2006), era, 1.6)).toBeLessThan(-1);
+    expect(eraPenalty(v(2025), era, 1.6)).toBe(0);
+    expect(eraOf([v(2020)])).toBeNull();
   });
 });

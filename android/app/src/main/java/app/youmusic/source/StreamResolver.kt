@@ -17,6 +17,9 @@ data class ResolvedStream(
     val bitrate: Int,
     val expiresAt: Long,
     val userAgent: String,
+    val codec: String? = null,
+    val contentLength: Long = -1,
+    val sampleRate: Int = -1,
 ) {
     val extension: String get() = format?.suffix ?: "m4a"
 }
@@ -40,6 +43,9 @@ class StreamResolver(private val youtube: YouTubeRepository, private val kv: Key
             bitrate = stream.averageBitrate,
             expiresAt = expire - 10 * 60_000L,
             userAgent = userAgentFor(stream.content),
+            codec = runCatching { stream.codec }.getOrNull(),
+            contentLength = runCatching { stream.itagItem?.contentLength ?: -1L }.getOrDefault(-1L),
+            sampleRate = runCatching { stream.itagItem?.sampleRate ?: -1 }.getOrDefault(-1),
         ).also { cache[key] = it }
     }
 
@@ -78,6 +84,11 @@ class StreamResolver(private val youtube: YouTubeRepository, private val kv: Key
         }
         return null
     }
+
+    /** Last stream chosen for a video (any quality), for "О треке". */
+    fun cached(videoId: String): ResolvedStream? =
+        alternatives[videoId]?.let { alt -> cache.entries.firstOrNull { it.key.startsWith("$alt|") }?.value }
+            ?: cache.entries.firstOrNull { it.key.startsWith("$videoId|") && it.key.endsWith("|false") }?.value
 
     /** Stream URLs are bound to the public IP; drop them all when the route changes (VPN, proxy, network). */
     fun clearAll() = cache.clear()

@@ -13,10 +13,12 @@ import kotlinx.serialization.Serializable
 @Serializable data class IndexArgs(val index: Int)
 @Serializable data class MoveArgs(val from: Int, val to: Int)
 @Serializable data class QueueAddArgs(val tracks: List<TrackDto>, val next: Boolean = false)
+@Serializable data class QueueReplaceArgs(val tracks: List<TrackDto> = emptyList())
+@Serializable data class TrackArgs(val track: TrackDto)
 @Serializable data class RepeatArgs(val mode: String)
 @Serializable data class ShuffleArgs(val enabled: Boolean)
 
-class PlayerModule(private val player: PlayerController) : BridgeModule {
+class PlayerModule(private val player: PlayerController, private val info: app.youmusic.player.TrackInfoReader) : BridgeModule {
     override fun register(registry: CommandRegistry) = with(registry) {
         command<PlayArgs, Unit>("play") { player.play(it.queue, it.index, it.positionMs) }
         command<NoArgs, Unit>("pause") { player.withPlayer { p -> p.pause() } }
@@ -36,6 +38,7 @@ class PlayerModule(private val player: PlayerController) : BridgeModule {
         }
         command<IndexArgs, Unit>("skipTo") { a -> player.withPlayer { p -> if (a.index in 0 until p.mediaItemCount) { p.seekTo(a.index, 0); p.play() } } }
         command<QueueAddArgs, Unit>("queueAdd") { player.add(it.tracks, it.next) }
+        command<QueueReplaceArgs, Unit>("queueReplaceUpcoming") { player.replaceUpcoming(it.tracks) }
         command<IndexArgs, Unit>("queueRemove") { a -> player.withPlayer { p -> if (a.index in 0 until p.mediaItemCount) p.removeMediaItem(a.index) } }
         command<MoveArgs, Unit>("queueMove") { a ->
             player.withPlayer { p -> if (a.from in 0 until p.mediaItemCount && a.to in 0 until p.mediaItemCount) p.moveMediaItem(a.from, a.to) }
@@ -44,5 +47,6 @@ class PlayerModule(private val player: PlayerController) : BridgeModule {
         command<RepeatArgs, Unit>("setRepeat") { a -> player.withPlayer { p -> p.repeatMode = PlayerController.repeatMode(a.mode) } }
         command<ShuffleArgs, Unit>("setShuffle") { a -> player.withPlayer { p -> p.shuffleModeEnabled = a.enabled } }
         command<NoArgs, PlayerStateDto>("getPlayerState") { player.state() }
+        command<TrackArgs, app.youmusic.player.TrackInfoDto>("trackInfo") { info.info(it.track) }
     }
 }

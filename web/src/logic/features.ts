@@ -11,6 +11,11 @@ export interface Vibe {
   aggression: number;
   tempo: number;
   dance: number;
+  /** Release year, when known: steers away from old songs for people who listen to new ones (and vice versa). */
+  year?: number | null;
+  /** 0..1 from the Deezer rank: how mainstream the song is. */
+  popularity?: number | null;
+  genres?: string[];
 }
 
 const clamp = (x: number) => Math.min(1, Math.max(0, x));
@@ -36,7 +41,7 @@ export function genreAggression(genres: string[]): number | null {
 
 export function vibeOf(f: TrackFeatures | null | undefined): Vibe | null {
   if (!f?.found) return null;
-  const known = [f.bpm, f.gainDb].filter((x) => x != null).length + (f.genres.length ? 1 : 0);
+  const known = [f.bpm, f.gainDb, f.year].filter((x) => x != null).length + (f.genres.length ? 1 : 0);
   if (!known) return null;
   // Deezer gain: about -3 dB for quiet/dynamic masters, -15 dB for brick-walled ones.
   const loud = f.gainDb != null ? clamp((-f.gainDb - 3) / 12) : 0.5;
@@ -47,7 +52,32 @@ export function vibeOf(f: TrackFeatures | null | undefined): Vibe | null {
     aggression: clamp(0.35 * loud + 0.15 * tempo + 0.5 * genre + (f.explicit ? 0.08 : 0)),
     tempo,
     dance: f.bpm ? clamp(1 - Math.abs(f.bpm - 122) / 50) : 0.5,
+    year: f.year ?? null,
+    popularity: f.rank != null ? clamp(f.rank / 900_000) : null,
+    genres: f.genres,
   };
+}
+
+export interface Era {
+  /** Median release year of the songs. */
+  year: number;
+  /** Half of the middle range, at least a few years. */
+  spread: number;
+}
+
+/** Which years the songs come from; null with fewer than `min` dated songs. */
+export function eraOf(vibes: (Vibe | null | undefined)[], min = 5): Era | null {
+  const years = vibes.map((v) => v?.year).filter((y): y is number => !!y && y > 1900).sort((a, b) => a - b);
+  if (years.length < min) return null;
+  const q = (p: number) => years[Math.min(years.length - 1, Math.floor(p * years.length))];
+  return { year: q(0.5), spread: Math.max(4, (q(0.8) - q(0.2)) / 2) };
+}
+
+/** Score adjustment ≤ 0 for songs far outside the listener's years: a fan of new music gets no 2005 hits. */
+export function eraPenalty(v: Vibe | null | undefined, era: Era | null, weight: number): number {
+  if (!v?.year || !era) return 0;
+  const outside = Math.abs(v.year - era.year) - era.spread;
+  return outside > 0 ? -weight * Math.min(1, outside / 8) : 0;
 }
 
 /** Average vibe; null for fewer than `min` known songs (too little to say anything). */

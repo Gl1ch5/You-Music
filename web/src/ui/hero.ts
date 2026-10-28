@@ -7,7 +7,7 @@ import type { Scope } from '../core/signal';
  * half-desaturated cover rendered natively, under a graphite layer — the cover tints the page, never paints it.
  */
 export function pageHero(scope: Scope, opts: { title: string; sub?: Child; cover: HTMLElement; artUrl?: string | null; actions?: Child[] }): HTMLElement {
-  const bg = h('div.dyn-bg');
+  const bg = h('div.dyn-stack');
   const dim = h('div.dyn-dim');
   opts.cover.classList.add('big');
   const hero = h(
@@ -24,9 +24,20 @@ export function pageHero(scope: Scope, opts: { title: string; sub?: Child; cover
   return hero;
 }
 
-export function applyDynamicBackground(scope: Scope, bg: HTMLElement, url: string, onColor?: (color: string | null) => void): void {
+/**
+ * Blurred cover behind a page or the player. `host` is a `.dyn-stack`: a new picture fades in as its own layer over
+ * the previous one, which is removed afterwards — switching tracks never flashes the plain background.
+ */
+export function applyDynamicBackground(scope: Scope, host: HTMLElement, url: string, onColor?: (color: string | null) => void): void {
   let alive = true;
-  scope.add(() => (alive = false));
+  let applied = false;
+  scope.add(() => {
+    alive = false;
+    // Interrupted before the picture arrived: let the next call with the same url load it again.
+    if (!applied && host.dataset.src === url) delete host.dataset.src;
+  });
+  if (host.dataset.src === url) return;
+  host.dataset.src = url;
   call('artworkPalette', { url })
     .then((p) => {
       if (!alive) return;
@@ -34,9 +45,13 @@ export function applyDynamicBackground(scope: Scope, bg: HTMLElement, url: strin
       if (!p.blurUrl) return;
       const img = new Image();
       img.onload = () => {
-        if (!alive) return;
-        bg.style.backgroundImage = `url("${p.blurUrl}")`;
-        bg.classList.add('ready');
+        if (!alive || host.dataset.src !== url) return;
+        const layer = h('div.dyn-bg', { style: { backgroundImage: `url("${p.blurUrl}")` } });
+        applied = true;
+        const previous = [...host.children];
+        host.appendChild(layer);
+        requestAnimationFrame(() => requestAnimationFrame(() => layer.classList.add('ready')));
+        setTimeout(() => previous.forEach((e) => e.remove()), 700);
       };
       img.src = p.blurUrl;
     })

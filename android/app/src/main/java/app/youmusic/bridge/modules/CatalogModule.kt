@@ -23,6 +23,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class IdArgs(val id: String)
 @Serializable data class UrlArgs(val url: String)
 @Serializable data class LyricsArgs(val artist: String, val title: String, val durationMs: Long = 0)
+@Serializable data class TranslateArgs(val lines: List<String>, val to: String = "ru")
+@Serializable data class ChartArgs(val source: String = "yandex")
 @Serializable data class FeaturesArgs(val tracks: List<FeatureQueryDto>)
 
 /** Read-only catalogue: YouTube search and pages, lyrics, artwork palettes, audio features, import from other services. */
@@ -32,6 +34,7 @@ class CatalogModule(
     private val artwork: ArtworkProcessor,
     private val importer: ImportRepository,
     private val features: FeaturesRepository,
+    private val translator: app.youmusic.source.Translator,
 ) : BridgeModule {
     override fun register(registry: CommandRegistry) = with(registry) {
         command<SearchArgs, SearchPageDto>("search") { youtube.search(it.query, it.filter, it.page) }
@@ -42,6 +45,8 @@ class CatalogModule(
         command<LyricsArgs, LyricsDto>("lyrics") { lyrics.lyrics(it.artist, it.title, it.durationMs) }
         command<UrlArgs, PaletteDto>("artworkPalette") { artwork.palette(it.url) }
         command<UrlArgs, ImportedListDto>("importFetch") { importer.fetch(it.url) }
+        command<ChartArgs, ImportedListDto>("chart") { importer.chart(it.source) }
+        command<TranslateArgs, app.youmusic.source.TranslationDto>("translate") { translator.translate(it.lines, it.to) }
         command<FeaturesArgs, Map<String, TrackFeaturesDto>>("trackFeatures") { features.features(it.tracks) }
     }
 }

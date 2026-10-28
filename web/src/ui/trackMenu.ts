@@ -6,7 +6,9 @@ import { app, likedIds } from '../core/store';
 import { guard, slots } from '../mods/registry';
 import { addToPlaylist, createPlaylist, download, removeDownload, toggleLike } from '../services/library';
 import { addToQueue, playTrackWave } from '../services/playback';
+import { isDisliked, toggleDislike } from '../services/dislikes';
 import { cover, trackCover } from './components';
+import { openTrackInfo } from './trackInfo';
 import { actionSheet, openSheet, promptSheet, type Action } from './sheet';
 
 export interface MenuExtras {
@@ -28,6 +30,10 @@ export function openTrackMenu(track: Track, extras: MenuExtras = {}): void {
     { icon: liked ? 'heart-fill' : 'heart', label: liked ? 'Убрать из «Мне нравится»' : 'Мне нравится', run: () => toggleLike(track) },
     { icon: 'plus', label: 'Добавить в плейлист', run: () => pickPlaylist([track]) },
   ];
+  if (track.source !== 'local') {
+    const off = isDisliked(track);
+    actions.push({ icon: off ? 'dislike-fill' : 'dislike', label: off ? 'Снова рекомендовать' : 'Не нравится', sub: off ? undefined : 'Больше не попадётся в рекомендациях', run: () => toggleDislike(track) });
+  }
   if (track.source === 'yt') {
     actions.push({ icon: 'wave', label: 'Волна по треку', sub: 'Похожие по звучанию и настроению', run: () => playTrackWave(track) });
     actions.push(
@@ -36,12 +42,22 @@ export function openTrackMenu(track: Track, extras: MenuExtras = {}): void {
         : { icon: 'download', label: 'Скачать', run: () => download([track]) },
     );
     if (track.artistUrl) actions.push({ icon: 'user', label: 'К исполнителю', run: () => navigate('artist', { url: track.artistUrl, name: track.artist }) });
-    actions.push({ icon: 'share', label: 'Поделиться', run: () => call('share', { text: `${track.artist} — ${track.title}\n${track.url ?? ''}` }) });
+    actions.push({ icon: 'share', label: 'Поделиться', run: () => shareTrack(track) });
   }
+  actions.push({ icon: 'info', label: 'О треке', sub: 'Формат, битрейт, размер', run: () => openTrackInfo(track) });
   for (const item of slots.trackMenu.peek()) {
     actions.push({ icon: item.icon ?? 'puzzle', label: item.label, run: () => guard(item.modId, item.onClick)(track) });
   }
   actionSheet(trackHeader(track), actions);
+}
+
+/** A link that opens the track in You Music (the page offers the app, or YouTube without it). */
+export function shareLink(track: Track): string {
+  return `https://grzxk.ru/youmusic/t/${encodeURIComponent(track.id.replace(/^yt:/, ''))}`;
+}
+
+export function shareTrack(track: Track): Promise<void> {
+  return call('share', { text: `${track.artist} — ${track.title}\n${shareLink(track)}` });
 }
 
 export function pickPlaylist(tracks: Track[]): void {

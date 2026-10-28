@@ -57,7 +57,7 @@ my-mod/
 ```js
 mod.id; mod.manifest; mod.apiVersion; mod.baseUrl
 
-// События: trackChanged, stateChanged, queueChanged, progress, like, skip, screen, online
+// События: trackChanged, stateChanged, queueChanged, progress, like, dislike, skip, screen, online
 const off = mod.on('trackChanged', ({ track, index }) => {});
 
 // Плеер

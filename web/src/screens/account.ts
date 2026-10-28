@@ -8,7 +8,7 @@ import { toast } from '../ui/toast';
 /** What the account gives, in plain words — shown here and in the first-launch setup. */
 export const SERVER_PERKS: [string, string, string][] = [
   ['cloud', 'Ваша музыка не потеряется', 'Лайки, плейлисты и история хранятся в облаке. Новый телефон или переустановка — вошли, и всё на месте.'],
-  ['sparkle', '50 нейро-подборок в день', 'Нейросеть подбирает музыку под ваш вкус. Ничего настраивать и платить не нужно.'],
+  ['sparkle', 'Умные рекомендации', 'Нейросеть помогает подбирать музыку под ваш вкус — до 50 запросов в день. Ничего настраивать и платить не нужно.'],
   ['shield', 'Бесплатный прокси', 'Если YouTube тормозит или не открывается — включите прокси, и музыка пойдёт через наш сервер.'],
 ];
 
@@ -80,7 +80,7 @@ defineRoute('account', ({ scope }) => {
         sub: s.syncing ? 'Синхронизируем…' : s.syncError ? `Ошибка: ${s.syncError}` : `Последняя: ${ago(s.syncedAt)} · происходит сама после изменений`,
         trailing: button('Сейчас', () => void busy(syncNow()).catch((e) => toast((e as Error).message, { icon: 'alert' })), { cls: 'ghost' }),
       }),
-      listItem({ icon: 'sparkle', title: 'Нейро-подборки', sub: s.ai.enabled ? `Осталось сегодня: ${s.ai.left} из ${s.ai.limit}` : 'Временно недоступны' }),
+      listItem({ icon: 'sparkle', title: 'Нейросеть в рекомендациях', sub: s.ai.enabled ? `Осталось сегодня: ${s.ai.left} из ${s.ai.limit}` : 'Временно недоступны' }),
       s.proxyAvailable
         ? listItem({
             icon: 'shield',

@@ -87,3 +87,17 @@ export async function findTrack(src: ImportedTrack): Promise<Track | null> {
   }
   return null;
 }
+
+/**
+ * A track found for an imported one keeps the source's clean metadata and its square, high-resolution cover:
+ * lyrics are looked up by exact artist/title and the cover is the release art, not a video frame.
+ */
+export function adoptSourceMeta(match: Track, src: ImportedTrack): Track {
+  return {
+    ...match,
+    title: src.title || match.title,
+    artist: src.artist || match.artist,
+    artwork: src.artwork || match.artwork,
+    album: src.album || match.album,
+  };
+}

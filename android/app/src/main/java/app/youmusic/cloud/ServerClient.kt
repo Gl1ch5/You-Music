@@ -71,7 +71,26 @@ private data class SyncUpload(val data: String)
 private data class Credentials(val login: String, val password: String)
 
 @Serializable
-private data class ChatBody(val messages: List<AiMessage>, val temperature: Double)
+data class TgLinkDto(val code: String, val url: String, val linked: Boolean = false)
+
+@Serializable
+data class TgTrackDto(
+    val id: String,
+    val title: String,
+    val artist: String = "",
+    val durationMs: Long = 0,
+    val size: Long = 0,
+    val mime: String = "audio/mpeg",
+    /** Absolute URL (public by its random id) or null. */
+    val cover: String? = null,
+    val at: Long = 0,
+)
+
+@Serializable
+data class TgListDto(val linked: Boolean = false, val bot: String = "", val tracks: List<TgTrackDto> = emptyList())
+
+@Serializable
+private data class ChatBody(val messages: List<AiMessage>, val temperature: Double, val tier: String = "fast")
 
 /**
  * Optional You Music account on the author's server: cloud sync of the library, AI recommendations
@@ -191,13 +210,45 @@ class ServerClient(
     }
 
     /** AI chat through the server's model (the daily limit is enforced there). */
-    override fun chat(messages: List<AiMessage>, temperature: Double): String {
-        val text = requestBlocking("/api/ai/chat", "POST", BridgeJson.encodeToString(ChatBody.serializer(), ChatBody(messages, temperature)), timeoutSec = 100)
+    override fun chat(messages: List<AiMessage>, temperature: Double, tier: String): String {
+        val text = requestBlocking("/api/ai/chat", "POST", BridgeJson.encodeToString(ChatBody.serializer(), ChatBody(messages, temperature, tier)), timeoutSec = 100)
         val obj = BridgeJson.parseToJsonElement(text).jsonObject
         obj["left"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.let { left ->
             user?.let { saveUser(it.copy(ai = it.ai.copy(left = left))) }
         }
         return obj["content"]?.jsonPrimitive?.contentOrNull ?: throw BridgeException("ai_error", "Пустой ответ нейросети")
+    }
+
+    /** One-time link that binds the user's Telegram chat with the bot to this account. */
+    fun tgLink(): TgLinkDto = request("/api/tg/link", "POST", "{}", TgLinkDto.serializer())
+
+    /** Audio files the user sent to the bot, waiting to be imported. */
+    fun tgTracks(): TgListDto {
+        if (!signedIn) throw BridgeException("unauthorized", "Войдите в аккаунт, чтобы переносить музыку из Telegram")
+        val list = request("/api/tg/tracks", "GET", null, TgListDto.serializer())
+        return list.copy(tracks = list.tracks.map { t -> t.copy(cover = t.cover?.let { if (it.startsWith("/")) BASE_URL + it else it }) })
+    }
+
+    fun tgDelete(id: String) {
+        requestBlocking("/api/tg/tracks/$id", "DELETE", null)
+    }
+
+    /** Streams a server file into [dest] (written to a temp file first, so a broken download leaves nothing behind). */
+    fun download(path: String, dest: java.io.File) {
+        if (!network.online) throw BridgeException("offline", "Нет сети")
+        val request = Request.Builder().url(BASE_URL + path).apply { token?.let { header("Authorization", "Bearer $it") } }.build()
+        val client = Http.client.newBuilder().readTimeout(120, TimeUnit.SECONDS).build()
+        val tmp = java.io.File(dest.parentFile, dest.name + ".part")
+        try {
+            client.newCall(request).execute().use { r ->
+                if (!r.isSuccessful) throw BridgeException("server", "Сервер не отдал файл (код ${r.code})")
+                tmp.outputStream().use { out -> r.body.byteStream().copyTo(out) }
+            }
+            if (!tmp.renameTo(dest)) throw BridgeException("storage", "Не удалось сохранить файл")
+        } catch (e: IOException) {
+            tmp.delete()
+            throw BridgeException("network", "Сервер недоступен: ${e.message ?: "нет связи"}")
+        }
     }
 
     override val available: Boolean get() = signedIn && user?.ai?.enabled == true

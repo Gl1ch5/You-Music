@@ -15,7 +15,13 @@ import kotlinx.serialization.json.longOrNull
 import okhttp3.Request
 
 @Serializable
-data class ImportedTrackDto(val title: String, val artist: String, val durationMs: Long = 0)
+data class ImportedTrackDto(
+    val title: String,
+    val artist: String,
+    val durationMs: Long = 0,
+    val artwork: String? = null,
+    val album: String? = null,
+)
 
 @Serializable
 data class ImportedListDto(
@@ -41,6 +47,20 @@ class ImportRepository {
         return read(link).let { if (it.source == "yandex") it.copy(via = via) else it }
     }
 
+    /** Top songs right now. Yandex is the only chart readable without an account (VK needs a sign-in). */
+    suspend fun chart(source: String): ImportedListDto {
+        via = null
+        if (source != "yandex") throw BridgeException("bad_request", "Этот чарт пока недоступен")
+        val tracks = runCatching {
+            val result = yandexApi("landing3/chart")
+            val chart = result["chart"] as? JsonObject ?: result
+            (chart["tracks"] as? JsonArray).orEmpty().mapNotNull { ((it as? JsonObject)?.get("track") as? JsonObject)?.let(::yandexTrack) }
+        }.getOrDefault(emptyList())
+        // The "Чарт" playlist of the official yamusic-top account mirrors the same list.
+        val list = tracks.ifEmpty { yandexPlaylist("users/yamusic-top/playlists/1076").tracks }
+        return ImportedListDto("Чарт Яндекс Музыки", "yandex", list, via = via)
+    }
+
     private suspend fun read(link: String): ImportedListDto {
         val url = link.trim()
         SPOTIFY.find(url)?.let { m -> return spotify(m.groupValues[1], m.groupValues[2]) }
@@ -63,9 +83,14 @@ class ImportRepository {
         val json = NEXT_DATA.find(html)?.groupValues?.get(1) ?: throw BridgeException("extraction", "Spotify изменил страницу — не удалось прочитать список")
         val entity = BridgeJson.parseToJsonElement(json).obj("props")?.obj("pageProps")?.obj("state")?.obj("data")?.obj("entity")
             ?: throw BridgeException("extraction", "Spotify изменил страницу — не удалось прочитать список")
+        // An album shares one cover; playlists carry no per-track art in the embed (recommendations data fills it in later).
+        val albumCover = if (type == "album") {
+            ((entity.obj("coverArt")?.get("sources") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                .maxByOrNull { it["width"]?.jsonPrimitive?.longOrNull ?: 0 })?.str("url")
+        } else null
         val list = (entity["trackList"] as? JsonArray).orEmpty().mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            ImportedTrackDto(o.str("title") ?: return@mapNotNull null, o.str("subtitle").orEmpty(), o["duration"]?.jsonPrimitive?.longOrNull ?: 0)
+            ImportedTrackDto(o.str("title") ?: return@mapNotNull null, o.str("subtitle").orEmpty(), o["duration"]?.jsonPrimitive?.longOrNull ?: 0, artwork = albumCover)
         }
         val singleTrack = if (type == "track") listOf(ImportedTrackDto(entity.str("name").orEmpty(), entity.str("subtitle").orEmpty(), entity["duration"]?.jsonPrimitive?.longOrNull ?: 0)) else emptyList()
         return ImportedListDto(entity.str("name") ?: "Spotify", "spotify", list.ifEmpty { singleTrack })
@@ -131,7 +156,16 @@ class ImportRepository {
         val title = t.str("title") ?: return null
         val version = t.str("version")
         val artists = (t["artists"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.str("name") }
-        return ImportedTrackDto(if (version.isNullOrBlank()) title else "$title ($version)", artists.joinToString(", "), t["durationMs"]?.jsonPrimitive?.longOrNull ?: 0)
+        val album = (t["albums"] as? JsonArray)?.firstOrNull() as? JsonObject
+        // "avatars.yandex.net/get-yandex-music-content/…/%%" — the size goes in place of %%.
+        val cover = (t.str("coverUri") ?: album?.str("coverUri"))?.let { "https://" + it.replace("%%", "1000x1000") }
+        return ImportedTrackDto(
+            if (version.isNullOrBlank()) title else "$title ($version)",
+            artists.joinToString(", "),
+            t["durationMs"]?.jsonPrimitive?.longOrNull ?: 0,
+            artwork = cover,
+            album = album?.str("title"),
+        )
     }
 
     private fun JsonElement.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject

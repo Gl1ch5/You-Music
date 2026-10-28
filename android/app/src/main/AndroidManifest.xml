@@ -29,12 +29,19 @@
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
             android:windowSoftInputMode="adjustResize">
-            <!-- youmusic://socks?server=…, youmusic://http?…, youmusic://proxy?url=…, youmusic://ai?…, youmusic://updates -->
+            <!-- youmusic://socks?server=…, youmusic://http?…, youmusic://proxy?url=…, youmusic://ai?…, youmusic://updates, youmusic://track?id=… -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="youmusic" />
+            </intent-filter>
+            <!-- Shared track links: https://grzxk.ru/youmusic/t/<videoId> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="grzxk.ru" android:pathPrefix="/youmusic/t/" />
             </intent-filter>
         </activity>
 

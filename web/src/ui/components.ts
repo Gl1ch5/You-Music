@@ -17,15 +17,31 @@ export function cover(urls: string[], cls = '', placeholder = 'note'): HTMLEleme
 }
 
 export function setCoverUrls(box: HTMLElement, urls: string[]): void {
-  box.querySelector('img')?.remove();
-  if (!urls.length) return;
-  const img = h('img', { attrs: { alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' } });
+  // Same artwork again (queue updates re-send the current track): keep the picture, no flash.
+  const key = urls.join('|');
+  if (box.dataset.src === key && box.querySelector('img')) return;
+  box.dataset.src = key;
+  const old = [...box.querySelectorAll('img')];
+  if (!urls.length) {
+    old.forEach((o) => o.remove());
+    return;
+  }
+  const img = h('img', { attrs: { alt: '', decoding: 'async', referrerpolicy: 'no-referrer' } });
+  // The previous picture stays underneath until the new one is decoded, then fades out from under it.
+  if (!old.length) img.setAttribute('loading', 'lazy');
   let i = 0;
-  img.onload = () => img.classList.add('loaded');
+  const done = () => old.forEach((o) => o.remove());
+  img.onload = () => {
+    img.classList.add('loaded');
+    if (old.length) setTimeout(done, 260);
+  };
   img.onerror = () => {
     i++;
     if (i < urls.length) img.src = urls[i];
-    else img.remove();
+    else {
+      img.remove();
+      done();
+    }
   };
   img.src = urls[0];
   box.appendChild(img);

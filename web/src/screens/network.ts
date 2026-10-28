@@ -194,7 +194,7 @@ defineRoute('ai', () => {
     base.value = cfg.baseUrl;
     model.value = cfg.model;
     key.placeholder = cfg.hasKey ? 'Ключ сохранён — оставьте пустым, чтобы не менять' : 'API-ключ';
-    replaceChildren(toggle, listItem({ icon: 'sparkle', title: 'Нейро-рекомендации', sub: 'Подборка на главной и режим «Нейро» в волне', trailing: switchControl(cfg.enabled, async (enabled) => {
+    replaceChildren(toggle, listItem({ icon: 'sparkle', title: 'Своя нейросеть', sub: 'Помогает рекомендациям и понимает свои фильтры', trailing: switchControl(cfg.enabled, async (enabled) => {
       await call('aiConfigure', { enabled });
       await refreshAiConfig();
     }) }));

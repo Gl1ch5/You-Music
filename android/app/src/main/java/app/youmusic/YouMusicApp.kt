@@ -1,5 +1,8 @@
 package app.youmusic
 
+import app.youmusic.player.TrackInfoReader
+import app.youmusic.source.Translator
+import app.youmusic.cloud.TelegramImporter
 import android.app.Application
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
@@ -57,6 +60,7 @@ class AppGraph(app: Application) {
     val mods = ModStore(app, paths)
     val artwork = ArtworkProcessor(paths)
     val lyrics = LyricsRepository()
+    val translator = Translator()
     val importer = ImportRepository()
     val features = FeaturesRepository(java.io.File(app.filesDir, "features.json"))
     val proxies = ProxyManager(kv, network) { dropStreamUrls() }
@@ -64,6 +68,7 @@ class AppGraph(app: Application) {
     val ai = AiClient(kv)
     val backup = BackupManager(app, library, kv, proxies, ai, appScope)
     val server = ServerClient(app, backup, proxies, network, appScope)
+    val telegram = TelegramImporter(server, library, paths, app.filesDir)
     val mediaCache = SimpleCache(
         paths.media,
         LeastRecentlyUsedCacheEvictor(kv.settings.cacheLimitMb.coerceIn(64, 8192).toLong() shl 20),
@@ -71,6 +76,7 @@ class AppGraph(app: Application) {
     )
     val playbackDataSource = PlaybackDataSourceFactory(app, mediaCache, resolver, downloads, network)
     val player = PlayerController(app, paths, appScope)
+    val trackInfo = TrackInfoReader(app, downloads, resolver, mediaCache)
     val progressNotifications = ProgressNotifications(app)
     val appIcons = AppIcons(app)
 

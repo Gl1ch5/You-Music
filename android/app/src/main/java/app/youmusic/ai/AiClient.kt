@@ -32,7 +32,7 @@ private data class StoredAi(val baseUrl: String = "", val model: String = "", va
 data class AiMessage(val role: String, val content: String)
 
 /**
- * Minimal OpenAI-compatible chat client for "neuro" recommendations. Prompts and parsing live in the UI
+ * Minimal OpenAI-compatible chat client for hybrid recommendations, filters and translations. Prompts and parsing live in the UI
  * (web/src/logic/ai.ts); the key never leaves native storage.
  */
 class AiClient(private val kv: KeyValueStore) {
@@ -66,10 +66,14 @@ class AiClient(private val kv: KeyValueStore) {
         return config()
     }
 
-    fun chat(messages: List<AiMessage>, temperature: Double): String {
+    /**
+     * Own model first (when switched on), otherwise the account's. [tier] ("fast" | "deep") picks the account's model;
+     * an own model is used as configured.
+     */
+    fun chat(messages: List<AiMessage>, temperature: Double, tier: String = "fast"): String {
         val own = stored.enabled && stored.baseUrl.isNotEmpty() && stored.model.isNotEmpty()
-        fallback?.takeIf { !own && it.available }?.let { return it.chat(messages, temperature) }
-        if (stored.baseUrl.isEmpty() || stored.model.isEmpty()) throw BridgeException("ai_not_configured", "Нейро-рекомендации не настроены")
+        fallback?.takeIf { !own && it.available }?.let { return it.chat(messages, temperature, tier) }
+        if (stored.baseUrl.isEmpty() || stored.model.isEmpty()) throw BridgeException("ai_not_configured", "Нейросеть не настроена")
         val body = BridgeJson.encodeToString(ChatRequest.serializer(), ChatRequest(stored.model, messages, temperature))
         val request = Request.Builder()
             .url("${stored.baseUrl}/chat/completions")
@@ -96,5 +100,5 @@ class AiClient(private val kv: KeyValueStore) {
 
 interface AiFallback {
     val available: Boolean
-    fun chat(messages: List<AiMessage>, temperature: Double): String
+    fun chat(messages: List<AiMessage>, temperature: Double, tier: String): String
 }

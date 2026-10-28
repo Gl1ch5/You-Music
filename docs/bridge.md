@@ -52,16 +52,20 @@
 | `skipTo`, `queueRemove` | `{index}` | — |
 | `queueAdd` | `{tracks, next?}` | — |
 | `queueMove` | `{from, to}` | — |
+| `queueReplaceUpcoming` | `{tracks}` | — (заменяет всё после текущего трека одним изменением очереди) |
 | `setRepeat`, `setShuffle` | `{mode: off\|all\|one}` / `{enabled}` | — |
 | `getPlayerState` | — | `PlayerState` |
+| `trackInfo` | `{track}` | `TrackInfo` — откуда играет (`download\|cache\|stream\|local`), контейнер, кодек, битрейт, частота, размер |
 | **Каталог (YouTube)** | | |
 | `search` | `{query, filter: all\|songs\|videos\|albums\|artists\|playlists, page?}` | `SearchPage` |
 | `searchSuggestions` | `{query}` | `string[]` |
 | `trackDetails` | `{id}` | `{track, related}` |
 | `getCollection` / `getArtist` | `{url}` | `CollectionPage` / `ArtistPage` |
-| `lyrics` | `{artist, title, durationMs}` | `{plain?, synced?}` (LRCLIB) |
+| `lyrics` | `{artist, title, durationMs}` | `{plain?, synced?}` (LRCLIB: точный запрос, затем поиск по очищенному названию, ближайший по длительности, синхронный текст в приоритете) |
+| `translate` | `{lines, to}` | `{lines, from?}` — перевод текста песни построчно (Google Translate без ключа), строки совпадают с оригиналом |
 | `importFetch` | `{url}` | `{title, source, tracks: {title, artist, durationMs}[], via?}` — список из Spotify / Яндекс Музыки по публичной ссылке. Если Яндекс не пускает текущую сеть (451, капча, таймаут), запросы идут через бесплатные российские прокси (`net/FreeProxies.kt`); `via` — какой прокси сработал |
-| `trackFeatures` | `{tracks: {id, artist, title, durationMs}[]}` | `{[id]: {found, bpm?, gainDb?, genres, explicit, year?}}` — темп, громкость, жанры из публичного API Deezer; кэш на диске (`features.json`), до 40 новых треков за вызов. Только для рекомендаций |
+| `chart` | `{source: yandex}` | `ImportedList` — чарт Яндекс Музыки (как перенос: напрямую, при 451 — через бесплатные прокси); UI сопоставляет треки с YouTube |
+| `trackFeatures` | `{tracks: {id, artist, title, durationMs}[]}` | `{[id]: {found, bpm?, gainDb?, genres, explicit, year?, rank?, cover?}}` — темп, громкость, жанры из публичного API Deezer; кэш на диске (`features.json`), до 40 новых треков за вызов. Только для рекомендаций |
 | `artworkPalette` | `{url}` | `{blurUrl, color}` — размытая обесцвеченная обложка + приглушённый тон |
 | **Библиотека** | | |
 | `getLibrary` | — | `{likes, playlists, downloads, local}` |
@@ -82,6 +86,10 @@
 | `serverLogout` | — | `ServerStatus`; бесплатный прокси отключается |
 | `serverSync` | — | `ServerStatus`; забрать облако (если менялось на другом устройстве, слияние без удалений) и отправить своё. Автоматически через 20 с после изменений и при запуске |
 | `serverProxy` | `{on}` | `ServerStatus`; прокси аккаунта (`id: "server"`, логин/пароль наружу не отдаются) |
+| `tgLink` | — | `{code, url, linked}`: одноразовая ссылка `t.me/<бот>?start=<код>` (15 мин), привязывает чат с ботом к аккаунту |
+| `tgTracks` | — | `{linked, bot, tracks: TgTrack[]}` — аудиофайлы, присланные боту (`cover` — полный URL или null) |
+| `tgImport` | `{track: TgTrack, artwork?}` | `Track` (`local:tg-…`): файл скачивается в `files/telegram`, обложка — из Telegram → `artwork` → сгенерированная; копия на сервере удаляется |
+| `tgDelete` | `{id}` | Удаляет присланный файл с сервера |
 | **Офлайн** | | |
 | `download` | `{tracks, quality?}` | — (очередь WorkManager) |
 | `downloadRemove` | `{id}` | — |
@@ -101,7 +109,7 @@
 | **Нейросеть** | | |
 | `aiConfig` | — | `{baseUrl, model, enabled, hasKey, server}` (ключ наружу не отдаётся; `server` — доступна нейросеть аккаунта, она используется, если своя выключена) |
 | `aiConfigure` | `{baseUrl?, model?, key?, enabled?}` | `AiConfig` |
-| `aiChat` | `{messages, temperature?}` | текст ответа (OpenAI-совместимый `/chat/completions`) |
+| `aiChat` | `{messages, temperature?, tier?: fast\|deep}` | текст ответа (OpenAI-совместимый `/chat/completions`). Своя нейросеть (если включена) важнее нейросети аккаунта; `tier` выбирает модель аккаунта (быстрая/тщательная) |
 | `consumeDeepLink` | — | ссылка `youmusic://…`, с которой открыли приложение, или `null` |
 | **Моды** | | |
 | `modsList` | — | `InstalledMod[]` |

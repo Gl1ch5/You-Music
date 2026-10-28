@@ -880,6 +880,12 @@
   transition: transform var(--t-open) var(--ease);
 }
 
+.dyn-stack {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .dyn-bg {
   position: absolute;
   inset: -10%;
@@ -1338,7 +1344,7 @@ input[type='color']::-webkit-color-swatch {
   overflow: hidden;
 }
 
-.hero > :not(.dyn-bg, .dyn-dim) {
+.hero > :not(.dyn-stack, .dyn-dim) {
   position: relative;
 }
 
@@ -1564,7 +1570,9 @@ input[type='color']::-webkit-color-swatch {
 }
 
 .busy-bar.on {
-  opacity: 1;
+  /* Quick actions finish before the bar shows up. */
+  opacity: 0.7;
+  transition-delay: 300ms;
 }
 
 .busy-bar i {
@@ -1803,3 +1811,73 @@ input[type='color']::-webkit-color-swatch {
 .icon-pick::after { content:''; position:absolute; inset:calc(var(--s-1) * -1); border:2px solid var(--accent); border-radius:calc(var(--r-card) + var(--s-1)); opacity:0; transition:opacity var(--t-base) var(--ease); }
 .icon-pick.active::after { opacity:1; }
 .icon-note { padding:0 var(--gutter) var(--s-6); }
+
+/* Filter chips under the stream row. */
+.reco-filters {
+  margin: var(--s-2) 0 var(--s-3);
+}
+
+/* The cover and the synced lyric line over its bottom edge. */
+.art-frame {
+  position: relative;
+  width: min(100%, 52vh);
+  aspect-ratio: 1;
+}
+
+.player-art .art-frame .cover {
+  width: 100%;
+}
+
+.art-lyric {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  padding: var(--s-6) var(--s-4) var(--s-4);
+  border-radius: 0 0 var(--r-card) var(--r-card);
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg) 78%, transparent));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-open) var(--ease);
+}
+
+.art-lyric.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.player-art.paused .art-lyric {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.art-lyric p {
+  grid-area: 1 / 1;
+  margin: 0;
+  font-size: var(--fs-track);
+  line-height: 1.35;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--t-open) var(--ease), transform var(--t-open) var(--ease);
+}
+
+.art-lyric p.in {
+  opacity: 1;
+  transform: none;
+}
+
+.lyric-tr {
+  display: block;
+  font-size: var(--fs-body);
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.btn-icon.dislike.on {
+  color: var(--text);
+}
