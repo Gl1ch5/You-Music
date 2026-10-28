@@ -1,5 +1,6 @@
 import { h, icon, setIcon } from '../core/dom';
 import { effect } from '../core/signal';
+import { app, player } from '../core/store';
 import { haptic } from '../ui/components';
 import { activeTab, mountRouter, switchTab, type Tab } from './router';
 
@@ -27,6 +28,8 @@ export function mountShell(root: HTMLElement, extras: HTMLElement[]): void {
     });
     nav.appendChild(btn);
   }
-  root.append(screens, ...extras, nav);
+  const bar = h('div.busy-bar', { attrs: { role: 'progressbar', 'aria-label': 'Загрузка' } }, h('i'));
+  effect(() => bar.classList.toggle('on', app.busy.value > 0 || player.preparing.value));
+  root.append(screens, ...extras, nav, bar);
   mountRouter(screens);
 }

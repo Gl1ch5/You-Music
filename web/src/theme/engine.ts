@@ -37,6 +37,7 @@ export function applyTheme(theme: Theme): void {
   root.setProperty('--scrim', t.dark ? 'rgb(0 0 0 / 0.55)' : 'rgb(28 29 31 / 0.35)');
   root.setProperty('--cover-edge', t.dark ? 'rgb(255 255 255 / 0.06)' : 'rgb(0 0 0 / 0.06)');
   document.documentElement.dataset.theme = t.dark ? 'dark' : 'light';
+  document.documentElement.classList.toggle('glass', !!t.glass);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t.colors.bg);
   useIconSet(t.icons.set);
   activeTheme.value = t;
@@ -110,6 +111,7 @@ export function sanitizeTheme(input: ThemeInput): Theme {
       dim: clamp(input.dynamic?.dim, 0.3, 0.95, g.dynamic.dim),
     },
     grain: clamp(input.grain, 0, 0.08, g.grain),
+    glass: input.glass === true,
   };
 }
 

@@ -160,7 +160,8 @@ class LibraryRepository(private val db: AppDatabase) {
      * Merges an export into the library: likes and history are added (no duplicates),
      * a playlist with the same name is replaced instead of being duplicated.
      */
-    suspend fun importData(data: LibraryExport): Int {
+    /** With [merge] (cloud sync), playlists keep their local tracks and gain the incoming ones. */
+    suspend fun importData(data: LibraryExport, merge: Boolean = false): Int {
         val known = data.tracks.map { it.id }.toHashSet()
         db.withTransaction {
             db.tracks().upsert(data.tracks.map(TrackEntity::from))
@@ -170,7 +171,9 @@ class LibraryRepository(private val db: AppDatabase) {
             data.playlists.forEach { p ->
                 val id = existing[p.name]?.firstOrNull()?.id
                     ?: db.playlists().insert(PlaylistEntity(name = p.name, createdAt = now, updatedAt = now))
-                db.playlists().replaceTracks(id, p.trackIds.filter { it in known }.distinct(), now)
+                val incoming = p.trackIds.filter { it in known }
+                val ids = if (merge) db.playlists().trackIds(id) + incoming else incoming
+                db.playlists().replaceTracks(id, ids.distinct(), now)
             }
             if (data.history.isNotEmpty()) {
                 val seen = db.history().keys().toHashSet()

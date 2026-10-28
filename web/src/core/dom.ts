@@ -119,3 +119,17 @@ export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: numb
     t = setTimeout(() => fn(...args), ms);
   };
 }
+
+/**
+ * Eats the click that follows a gesture which just hid an overlay (player, sheet), so it never reaches
+ * whatever was underneath. Clicks inside [keep] still go through.
+ */
+export function swallowNextClick(keep?: string, ms = 400): void {
+  const stop = (e: Event) => {
+    if (keep && (e.target as HTMLElement).closest?.(keep)) return;
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  document.addEventListener('click', stop, true);
+  setTimeout(() => document.removeEventListener('click', stop, true), ms);
+}

@@ -34,6 +34,7 @@ import app.youmusic.bridge.CommandRegistry
 import app.youmusic.bridge.EventBus
 import app.youmusic.bridge.modules.AiModule
 import app.youmusic.bridge.modules.BackupModule
+import app.youmusic.bridge.modules.ServerModule
 import app.youmusic.bridge.modules.CatalogModule
 import app.youmusic.bridge.modules.LibraryModule
 import app.youmusic.bridge.modules.ModsModule
@@ -106,6 +107,7 @@ class MainActivity : ComponentActivity(), ActivityHost {
             NetModule(applicationContext, graph.proxies, graph.updates),
             AiModule(graph.ai),
             BackupModule(graph.backup, this),
+            ServerModule(graph.server),
         ).forEach { it.register(registry) }
 
         val bridge = BridgeHost(lifecycleScope, registry)

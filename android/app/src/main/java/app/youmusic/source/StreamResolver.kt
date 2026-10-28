@@ -43,6 +43,42 @@ class StreamResolver(private val youtube: YouTubeRepository, private val kv: Key
         ).also { cache[key] = it }
     }
 
+    /** Unavailable video → another upload of the same song that plays (region locks, removed videos). */
+    private val alternatives = ConcurrentHashMap<String, String>()
+
+    /**
+     * Like [resolve], but when YouTube refuses the video ("This video is not available", UNPLAYABLE, age or region
+     * limits) finds the same song uploaded elsewhere by [query] ("artist title") with a close duration and plays that.
+     */
+    fun resolveOrAlternative(videoId: String, query: String?, durationMs: Long): ResolvedStream {
+        alternatives[videoId]?.let { alt -> runCatching { return resolve(alt) } }
+        return try {
+            resolve(videoId)
+        } catch (e: java.io.IOException) {
+            throw e
+        } catch (e: Exception) {
+            if (query.isNullOrBlank()) throw e
+            val alt = findAlternative(videoId, query, durationMs) ?: throw e
+            alternatives[videoId] = alt.first
+            alt.second
+        }
+    }
+
+    private fun findAlternative(videoId: String, query: String, durationMs: Long): Pair<String, ResolvedStream>? {
+        val candidates = listOf("songs", "videos").flatMap { filter ->
+            runCatching { kotlinx.coroutines.runBlocking { youtube.search(query, filter, null) }.items }.getOrDefault(emptyList())
+        }.mapNotNull { it.track }
+            .filter { it.id != "yt:$videoId" && it.source == "yt" }
+            .filter { durationMs <= 0 || it.durationMs <= 0 || kotlin.math.abs(it.durationMs - durationMs) < 20_000 }
+            .distinctBy { it.id }
+            .take(5)
+        for (t in candidates) {
+            val id = t.id.removePrefix("yt:")
+            runCatching { resolve(id) }.getOrNull()?.let { return id to it }
+        }
+        return null
+    }
+
     /** Stream URLs are bound to the public IP; drop them all when the route changes (VPN, proxy, network). */
     fun clearAll() = cache.clear()
 

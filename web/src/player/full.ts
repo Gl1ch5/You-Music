@@ -1,6 +1,6 @@
 import { call } from '../bridge/bridge';
 import type { Track } from '../bridge/contract';
-import { h, icon, prefersReducedMotion, replaceChildren } from '../core/dom';
+import { h, icon, prefersReducedMotion, replaceChildren, swallowNextClick } from '../core/dom';
 import { Scope } from '../core/signal';
 import { currentTrack, livePosition, player } from '../core/store';
 import { guard, slots } from '../mods/registry';
@@ -9,6 +9,7 @@ import { artFor } from '../services/art';
 import { related } from '../services/catalog';
 import { download, removeDownload } from '../services/library';
 import { expectLoading, next, playTrackWave, playTracks, previous, seek, togglePlay } from '../services/playback';
+import { linkArtist } from '../ui/artistLink';
 import { onBack } from '../ui/back';
 import { button, emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
 import { applyDynamicBackground } from '../ui/hero';
@@ -34,6 +35,7 @@ export function mountFullPlayer(): HTMLElement {
   const art = h('div.player-art', null, glow, artBox);
   const title = h('div.player-title.ellipsis');
   const artist = h('div.player-artist.ellipsis');
+  linkArtist(artist, () => currentTrack.peek(), () => closePlayer());
   const context = h('div.player-context.ellipsis');
 
   const progress = progressBar(scope, (ms) => seek(ms));
@@ -138,20 +140,9 @@ function setY(y: number, animate: boolean): void {
   root.style.transform = `translateY(${y}px)`;
 }
 
-/** Swallows the click that may follow the gesture which opened the player, so it never reaches the list below. */
-function swallowNextClick(): void {
-  const stop = (e: Event) => {
-    if ((e.target as HTMLElement).closest?.('.player')) return;
-    e.stopPropagation();
-    e.preventDefault();
-  };
-  document.addEventListener('click', stop, true);
-  setTimeout(() => document.removeEventListener('click', stop, true), 400);
-}
-
 export function openPlayer(): void {
   if (!currentTrack.peek()) return;
-  swallowNextClick();
+  swallowNextClick('.player');
   const height = window.innerHeight;
   root.classList.add('open');
   root.setAttribute('aria-hidden', 'false');
@@ -175,6 +166,7 @@ export function openPlayer(): void {
 export function closePlayer(): void {
   if (!root.classList.contains('open')) return;
   const height = window.innerHeight;
+  swallowNextClick();
   removeBack?.();
   removeBack = null;
   player.fullOpen.value = false;
@@ -224,7 +216,7 @@ export function dragPlayer(progress: number): void {
 }
 
 export function releasePlayer(open: boolean): void {
-  swallowNextClick();
+  swallowNextClick('.player');
   if (open) {
     root.classList.add('open');
     root.setAttribute('aria-hidden', 'false');

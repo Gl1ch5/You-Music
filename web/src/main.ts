@@ -13,6 +13,7 @@ import './screens/settings';
 import './screens/themeEditor';
 import './screens/import';
 import './screens/network';
+import './screens/account';
 
 import { goBack } from './app/router';
 import { mountShell } from './app/shell';
@@ -29,6 +30,8 @@ import { loadSettings } from './services/settings';
 import { refreshAiConfig } from './services/ai';
 import { initDeepLinks } from './services/deeplink';
 import { initBackup } from './services/backup';
+import { initServer } from './services/server';
+import { runOnboarding } from './ui/onboarding';
 import { initUpdates } from './services/updates';
 import { loadThemes } from './theme/engine';
 import { handleBack, onBack } from './ui/back';
@@ -71,10 +74,12 @@ async function boot(): Promise<void> {
 
   await Promise.all([refreshLibrary().catch(console.error), restorePlayer(), refreshAiConfig()]);
   initUpdates();
-  initBackup();
+  initServer();
   initDeepLinks();
   app.ready.value = true;
   document.documentElement.classList.add('ready');
+  // The restore offer waits for the first-launch setup so the two never overlap.
+  runOnboarding().catch(console.error).finally(initBackup);
 
   // Mods load last so a broken mod can never block the core UI.
   loadMods(hello.appVersion).catch(console.error);

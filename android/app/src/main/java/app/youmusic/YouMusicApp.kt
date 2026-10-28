@@ -8,6 +8,7 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import app.youmusic.ai.AiClient
 import app.youmusic.art.ArtworkProcessor
+import app.youmusic.cloud.ServerClient
 import app.youmusic.data.AppDatabase
 import app.youmusic.data.AppPaths
 import app.youmusic.data.BackupManager
@@ -60,6 +61,7 @@ class AppGraph(app: Application) {
     val updates = UpdateManager(app, kv)
     val ai = AiClient(kv)
     val backup = BackupManager(app, library, kv, proxies, ai, appScope)
+    val server = ServerClient(app, backup, proxies, network, appScope)
     val mediaCache = SimpleCache(
         paths.media,
         LeastRecentlyUsedCacheEvictor(kv.settings.cacheLimitMb.coerceIn(64, 8192).toLong() shl 20),
@@ -70,6 +72,7 @@ class AppGraph(app: Application) {
 
     init {
         updates.beforeInstall = { backup.saveNow() }
+        ai.fallback = server
         // A new public IP (VPN on/off, Wi-Fi ↔ mobile) invalidates googlevideo URLs.
         network.onChange { _, _ -> dropStreamUrls() }
     }
@@ -87,6 +90,7 @@ class YouMusicApp : Application() {
         NewPipe.init(NewPipeHttp, Localization(locale.language, locale.country.ifEmpty { null }), ContentCountry(locale.country.ifEmpty { "US" }))
         graph = AppGraph(this)
         graph.appScope.launch { graph.downloads.init() }
+        graph.appScope.launch { if (graph.server.signedIn && graph.network.online) runCatching { graph.server.sync() } }
         UpdateWorker.schedule(this, graph.kv.settings.autoUpdate)
         // Fetch YouTube's player script once up front so the first tap on a track doesn't pay for it.
         graph.appScope.launch {

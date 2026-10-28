@@ -16,7 +16,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 @Serializable
-data class AiConfigDto(val baseUrl: String = "", val model: String = "", val enabled: Boolean = false, val hasKey: Boolean = false)
+data class AiConfigDto(
+    val baseUrl: String = "",
+    val model: String = "",
+    val enabled: Boolean = false,
+    val hasKey: Boolean = false,
+    /** AI of the You Music account is available (used when the user's own model is off). */
+    val server: Boolean = false,
+)
 
 @Serializable
 private data class StoredAi(val baseUrl: String = "", val model: String = "", val key: String = "", val enabled: Boolean = false)
@@ -43,7 +50,10 @@ class AiClient(private val kv: KeyValueStore) {
         kv.set(KEY, BridgeJson.encodeToString(StoredAi.serializer(), stored))
     }
 
-    fun config() = AiConfigDto(stored.baseUrl, stored.model, stored.enabled, stored.key.isNotEmpty())
+    /** The account's AI (set by the app graph): used when the user has no model of their own. */
+    var fallback: AiFallback? = null
+
+    fun config() = AiConfigDto(stored.baseUrl, stored.model, stored.enabled, stored.key.isNotEmpty(), fallback?.available == true)
 
     fun configure(baseUrl: String?, model: String?, key: String?, enabled: Boolean?): AiConfigDto {
         stored = stored.copy(
@@ -57,6 +67,8 @@ class AiClient(private val kv: KeyValueStore) {
     }
 
     fun chat(messages: List<AiMessage>, temperature: Double): String {
+        val own = stored.enabled && stored.baseUrl.isNotEmpty() && stored.model.isNotEmpty()
+        fallback?.takeIf { !own && it.available }?.let { return it.chat(messages, temperature) }
         if (stored.baseUrl.isEmpty() || stored.model.isEmpty()) throw BridgeException("ai_not_configured", "Нейро-рекомендации не настроены")
         val body = BridgeJson.encodeToString(ChatRequest.serializer(), ChatRequest(stored.model, messages, temperature))
         val request = Request.Builder()
@@ -80,4 +92,9 @@ class AiClient(private val kv: KeyValueStore) {
     companion object {
         const val KEY = "native.ai"
     }
+}
+
+interface AiFallback {
+    val available: Boolean
+    fun chat(messages: List<AiMessage>, temperature: Double): String
 }

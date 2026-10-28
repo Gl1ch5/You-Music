@@ -49,6 +49,8 @@ export const app = {
   version: signal({ app: '', extractor: '' }),
   update: signal<UpdateState | null>(null),
   aiEnabled: signal(false),
+  /** Number of user-started actions still loading (see `busy()`); a thin bar at the top shows it. */
+  busy: signal(0),
 
   likes: signal<Like[]>([]),
   playlists: signal<Playlist[]>([]),
@@ -63,6 +65,8 @@ export const player = {
   /** The user wants playback (play pressed), even while the stream is still loading. Drives the play/pause glyph. */
   wantsPlay: signal(false),
   buffering: signal(false),
+  /** A stream (wave) is being put together: recommendations are still loading, nothing plays yet. */
+  preparing: signal(false),
   repeat: signal<RepeatMode>('off'),
   shuffle: signal(false),
   /** Last reported position; the UI extrapolates between reports with requestAnimationFrame. */

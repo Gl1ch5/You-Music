@@ -10,7 +10,7 @@ import { findTrack } from './catalog';
 
 export async function refreshAiConfig(): Promise<void> {
   const cfg = await call('aiConfig').catch(() => null);
-  app.aiEnabled.value = !!cfg?.enabled && !!cfg.baseUrl && !!cfg.model;
+  app.aiEnabled.value = (!!cfg?.enabled && !!cfg.baseUrl && !!cfg.model) || !!cfg?.server;
 }
 
 export interface AiPick {
@@ -36,7 +36,8 @@ export async function aiSuggest(source: RecoSource, count: number, mood?: string
       if (track && !liked.has(track.id) && !likedKeys.has(songKey(track)) && !picks.some((p) => p.track.id === track.id)) picks.push({ track, reason: s.reason });
     }
   };
-  await Promise.all([worker(), worker(), worker(), worker()]);
+  // The searches are independent network calls: run several at once.
+  await Promise.all(Array.from({ length: 6 }, worker));
   // Keep the model's order.
   const order = new Map(suggestions.map((s, i) => [`${s.artist}|${s.title}`.toLowerCase(), i]));
   return picks.sort((a, b) => (order.get(`${a.track.artist}|${a.track.title}`.toLowerCase()) ?? 99) - (order.get(`${b.track.artist}|${b.track.title}`.toLowerCase()) ?? 99));

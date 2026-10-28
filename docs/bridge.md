@@ -75,6 +75,12 @@
 | `backupSetFolder` | `{enabled}` | `BackupFolder {status, existing?}` или `null` (выбор отменён); `existing` — в папке уже лежит копия |
 | `backupRestoreFolder` | — | число треков (из `you-music-backup.json` в папке автокопии) |
 | `backupNow` | — | `true`, если копия записана (пустая библиотека не затирает существующую копию) |
+| **Аккаунт You Music (сервер, необязательно)** | | |
+| `serverStatus` | — | `ServerStatus {signedIn, login?, syncedAt, syncing, syncError?, ai{enabled,limit,left}, proxyAvailable, proxyOn}` (обновляет данные с сервера) |
+| `serverAuth` | `{login, password, register?}` | `ServerStatus`; после входа библиотека сливается с облачной |
+| `serverLogout` | — | `ServerStatus`; бесплатный прокси отключается |
+| `serverSync` | — | `ServerStatus`; забрать облако (если менялось на другом устройстве, слияние без удалений) и отправить своё. Автоматически через 20 с после изменений и при запуске |
+| `serverProxy` | `{on}` | `ServerStatus`; прокси аккаунта (`id: "server"`, логин/пароль наружу не отдаются) |
 | **Офлайн** | | |
 | `download` | `{tracks, quality?}` | — (очередь WorkManager) |
 | `downloadRemove` | `{id}` | — |
@@ -92,7 +98,7 @@
 | `updateInstall` | — | — (сначала обновляет автокопию; ошибка `signature`, если APK подписан другим ключом; PackageInstaller, система может попросить подтверждение) |
 | `updateSchedule` | `{enabled}` | — (фоновая проверка WorkManager, раз в 15 мин) |
 | **Нейросеть** | | |
-| `aiConfig` | — | `{baseUrl, model, enabled, hasKey}` (ключ наружу не отдаётся) |
+| `aiConfig` | — | `{baseUrl, model, enabled, hasKey, server}` (ключ наружу не отдаётся; `server` — доступна нейросеть аккаунта, она используется, если своя выключена) |
 | `aiConfigure` | `{baseUrl?, model?, key?, enabled?}` | `AiConfig` |
 | `aiChat` | `{messages, temperature?}` | текст ответа (OpenAI-совместимый `/chat/completions`) |
 | `consumeDeepLink` | — | ссылка `youmusic://…`, с которой открыли приложение, или `null` |
@@ -117,6 +123,7 @@
 | `proxyChanged` | `ProxyState` |
 | `updateState` | `UpdateState` (прогресс скачивания, готовность, `signatureMismatch`) |
 | `backupState` | `BackupStatus` (после каждой записи автокопии) |
+| `serverState` | `ServerStatus` (вход/выход, начало и конец синхронизации) |
 | `deepLink` | `{url}` — открыта ссылка `youmusic://…` |
 | `back` | — (системная кнопка «Назад») |
 

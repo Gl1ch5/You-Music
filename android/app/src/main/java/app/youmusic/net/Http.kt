@@ -2,7 +2,9 @@ package app.youmusic.net
 
 import okhttp3.Authenticator
 import okhttp3.Call
+import okhttp3.ConnectionPool
 import okhttp3.Credentials
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.net.InetSocketAddress
 import java.net.PasswordAuthentication
@@ -18,6 +20,9 @@ object Http {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            // Searches, related videos and track data go out in parallel; the defaults (5 per host) queue them.
+            .dispatcher(Dispatcher().apply { maxRequests = 64; maxRequestsPerHost = 16 })
+            .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
             .build()
     }
 

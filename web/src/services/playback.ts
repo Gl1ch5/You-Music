@@ -8,6 +8,7 @@ import { aiSuggest } from './ai';
 import { related } from './catalog';
 import { vibesOf } from './features';
 import { uiBus } from './events';
+import { busy } from '../core/busy';
 
 export const RELEASES_URL = 'https://github.com/Gl1ch5/You-Music/releases/latest';
 
@@ -50,7 +51,33 @@ export async function playTracks(tracks: Track[], index: number, context: PlayCo
   await call('play', { queue: list, index: start });
 }
 
-export async function playWave(): Promise<void> {
+/** Shows the loading ring on the play buttons and the top bar until the wave's first tracks are queued. */
+async function preparing(work: () => Promise<void>): Promise<void> {
+  if (player.preparing.peek()) return;
+  player.preparing.value = true;
+  const before = player.wantsPlay.peek();
+  player.wantsPlay.value = true;
+  player.buffering.value = true;
+  try {
+    await work();
+  } catch (e) {
+    toast('Не удалось запустить поток', { icon: 'offline' });
+    console.warn('wave start failed', e);
+  } finally {
+    player.preparing.value = false;
+    // Nothing started (no tracks, error): give the buttons their state back.
+    if (!player.playing.peek() && !currentTrack.peek()) {
+      player.wantsPlay.value = before;
+      player.buffering.value = false;
+    }
+  }
+}
+
+export function playWave(): Promise<void> {
+  return preparing(startWave);
+}
+
+async function startWave(): Promise<void> {
   if (!app.online.peek()) {
     const offline = [...app.likes.peek().map((l) => l.track), ...app.local.peek()].filter(isPlayable);
     if (!offline.length) return toast('Без сети поток играет скачанное — пока его нет', { icon: 'offline' });
@@ -71,7 +98,11 @@ export async function playWave(): Promise<void> {
 }
 
 /** Wave grown from one track: the track first, then songs related to it with a similar vibe. */
-export async function playTrackWave(seed: Track): Promise<void> {
+export function playTrackWave(seed: Track): Promise<void> {
+  return busy(startTrackWave(seed));
+}
+
+async function startTrackWave(seed: Track): Promise<void> {
   if (!app.online.peek() || seed.source !== 'yt') return toast('Волна по треку работает онлайн и для треков с YouTube', { icon: 'offline' });
   const current = new Wave(recoSource, 'mix', Math.random, seed);
   wave = current;

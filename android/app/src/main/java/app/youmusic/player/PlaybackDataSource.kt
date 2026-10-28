@@ -49,7 +49,7 @@ class PlaybackDataSourceFactory(
         if (!network.online) throw OfflineException()
         val videoId = spec.uri.lastPathSegment ?: return spec
         val stream = try {
-            resolver.resolve(videoId)
+            resolver.resolveOrAlternative(videoId, spec.uri.getQueryParameter("q"), spec.uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
         } catch (e: java.io.IOException) {
             throw e
         } catch (e: Exception) {

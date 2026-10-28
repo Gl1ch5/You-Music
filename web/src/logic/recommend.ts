@@ -223,6 +223,9 @@ export class Wave {
   private delivered: Track[] = [];
   private target: Vibe | null = null;
   private vibes = new Map<string, Vibe | null>();
+  private targetLoad: Promise<void> | null = null;
+  private extraIds = new Set<string>();
+  private extraPending: Promise<void> | null = null;
 
   /** With `seed`, the wave grows only from that track (and what it plays), matching its vibe: "волна по треку". */
   constructor(
@@ -243,6 +246,7 @@ export class Wave {
       const available = selectTracksPreview(scoreCandidates(this.candidates, profile, this.mode), profile, this.session);
       if (available >= count || !(await this.expand(3))) break;
     }
+    await this.targetLoad;
     const scored = await this.withVibe(scoreCandidates(this.candidates, profile, this.mode));
     const picked = selectTracks(scored, profile, this.session, count);
     const arranged = limitArtistRuns(picked, 2, this.delivered);
@@ -277,7 +281,8 @@ export class Wave {
     } else {
       this.seedQueue = pickSeeds(this.signalsCache, 12, this.rng);
     }
-    await this.loadTarget().catch(() => undefined);
+    // The target vibe is only needed for the final scoring: load it while the candidates are fetched.
+    this.targetLoad = this.loadTarget().catch(() => undefined);
   }
 
   /** Target vibe: the seed track's, or the average of the freshest likes. */
@@ -312,15 +317,15 @@ export class Wave {
       const fallback = this.delivered.filter((t) => !this.expanded.has(t.id)).slice(-n);
       seeds.push(...fallback.map((track) => ({ track, liked: false })));
     }
-    if (this.source.extra) {
-      const extra = await this.source.extra(this.delivered).catch(() => [] as Track[]);
-      for (const track of extra) {
-        this.candidates.push({ track, seedId: 'extra', seedLiked: true, rank: 0 }, { track, seedId: 'extra-2', seedLiked: true, rank: 0 });
-      }
-      if (extra.length && !seeds.length) return true;
+    // Extra (AI) candidates are fetched alongside the related videos, and only when the previous batch is
+    // nearly used up: every call is a request to the model.
+    const extra = this.refillExtra();
+    if (!seeds.length) {
+      await extra;
+      return this.extraLeft() > 0;
     }
     if (!seeds.length) return false;
-    const results = await Promise.allSettled(seeds.map((s) => this.source.related(s.track)));
+    const [results] = await Promise.all([Promise.allSettled(seeds.map((s) => this.source.related(s.track))), extra]);
     results.forEach((r, i) => {
       const seed = seeds[i];
       this.expanded.add(seed.track.id);
@@ -329,7 +334,34 @@ export class Wave {
     });
     return true;
   }
+
+  private extraLeft(): number {
+    let n = 0;
+    for (const id of this.extraIds) if (!this.session.seenIds.has(id)) n++;
+    return n;
+  }
+
+  private refillExtra(): Promise<void> {
+    if (!this.source.extra) return Promise.resolve();
+    if (!this.extraPending && this.extraLeft() < EXTRA_MIN) {
+      this.extraPending = this.source
+        .extra(this.delivered)
+        .catch(() => [] as Track[])
+        .then((tracks) => {
+          for (const track of tracks) {
+            if (this.extraIds.has(track.id)) continue;
+            this.extraIds.add(track.id);
+            this.candidates.push({ track, seedId: 'extra', seedLiked: true, rank: 0 }, { track, seedId: 'extra-2', seedLiked: true, rank: 0 });
+          }
+        })
+        .finally(() => (this.extraPending = null));
+    }
+    return this.extraPending ?? Promise.resolve();
+  }
 }
+
+/** Ask the model again once fewer than this many of its picks are left unplayed. */
+const EXTRA_MIN = 4;
 
 function selectTracksPreview(scored: Scored[], profile: Profile, session: Session): number {
   const probe: Session = { seenIds: new Set(session.seenIds), seenKeys: new Set(session.seenKeys), artistPenalty: session.artistPenalty };

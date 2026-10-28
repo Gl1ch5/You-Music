@@ -60,17 +60,23 @@ function streamRow(scope: Scope): HTMLElement {
     size: 'sm',
     playing: () => {
       const on = inStream();
-      return player.wantsPlay.value && on;
+      const prep = player.preparing.value;
+      return (player.wantsPlay.value && on) || prep;
     },
     loading: () => {
       const on = inStream();
-      return player.buffering.value && player.wantsPlay.value && on;
+      const prep = player.preparing.value;
+      return (player.buffering.value && player.wantsPlay.value && on) || prep;
     },
     onToggle: () => (isWaveActive() ? togglePlay() : playWave()),
   });
   const sub = h('div.row-sub.ellipsis');
   scope.effect(() => {
     const t = currentTrack.value;
+    if (player.preparing.value) {
+      sub.textContent = app.settings.peek().waveMode === 'neuro' ? 'Нейросеть подбирает треки…' : 'Подбираем треки…';
+      return;
+    }
     sub.textContent = t && inStream() ? `${t.artist} — ${t.title}` : `${modeLabel(app.settings.value.waveMode)} · бесконечно, под ваш вкус`;
   });
   return h('div.stream-row', { onclick: (e: MouseEvent) => !(e.target as HTMLElement).closest('button') && btn.click() }, btn, h('div.row-main', null, h('div.row-title', null, 'Слушать поток'), sub));

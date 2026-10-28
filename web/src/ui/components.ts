@@ -5,6 +5,7 @@ import { effect, track, type Scope } from '../core/signal';
 import { app, currentTrack, isPlayable, likedIds, livePosition, player } from '../core/store';
 import { artFor, type ArtSize } from '../services/art';
 import { toggleLike } from '../services/library';
+import { linkArtist } from './artistLink';
 
 /* ───────── Cover ───────── */
 
@@ -159,7 +160,7 @@ export function trackRow(track: Track, opts: RowOptions): HTMLElement {
       'div.row-main',
       null,
       h('div.row-title.ellipsis', null, track.title),
-      h('div.row-sub', null, dl ? icon('downloaded') : track.source === 'local' ? icon('file') : null, h('span.ellipsis', null, opts.sub ?? track.artist)),
+      h('div.row-sub', null, dl ? icon('downloaded') : track.source === 'local' ? icon('file') : null, artistSpan(track, opts.sub)),
     ),
     opts.onMore
       ? iconButton('more', 'Действия', (e) => {
@@ -170,6 +171,12 @@ export function trackRow(track: Track, opts: RowOptions): HTMLElement {
   );
   markRow(row, track.id);
   return row;
+}
+
+function artistSpan(track: Track, sub?: string): HTMLElement {
+  const span = h('span.ellipsis', null, sub ?? track.artist);
+  if (sub == null && track.source !== 'local') linkArtist(span, () => track);
+  return span;
 }
 
 /** Marks the now-playing row: accent title and an equaliser instead of the number / over the cover. */

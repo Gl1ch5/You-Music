@@ -1,5 +1,5 @@
 import type { Transport } from './bridge';
-import type { Commands, Download, HistoryEntry, InstalledMod, Like, Playlist, Proxy, Track, UpdateState } from './contract';
+import type { Commands, Download, HistoryEntry, InstalledMod, Like, Playlist, Proxy, ServerStatus, Track, UpdateState } from './contract';
 
 /**
  * In-memory stand-in for the Android layer, used by `npm run dev` in a desktop browser and by the screenshot
@@ -71,6 +71,7 @@ const mockUpdate: UpdateState = {
 };
 
 /* Simulated player */
+let mockServer: ServerStatus = { signedIn: false, syncedAt: 0, syncing: false, ai: { enabled: true, limit: 50, left: 50 }, proxyAvailable: true, proxyOn: false };
 let queue: Track[] = [];
 let index = -1;
 let playing = false;
@@ -112,7 +113,8 @@ setInterval(() => {
 
 const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][1] | Promise<Commands[K][1]> } = {
   hello: () => ({ appVersion: '1.0.0-dev', extractorVersion: 'mock', sdkInt: 36, online: true, insets: { top: 24, bottom: 16, left: 0, right: 0 } }),
-  kvGet: ({ key }) => kv.get(key) ?? null,
+  // Screenshots skip the first-launch setup unless the page is opened with ?onboarding.
+  kvGet: ({ key }) => kv.get(key) ?? (key === 'onboarding.done' && !location.search.includes('onboarding') ? '1' : null),
   kvSet: ({ key, value }) => void (value == null ? kv.delete(key) : kv.set(key, value)),
   kvKeys: ({ prefix }) => [...kv.keys()].filter((k) => k.startsWith(prefix)),
   haptic: () => undefined,
@@ -313,6 +315,11 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
   updateDownload: () => mockUpdate,
   updateInstall: () => undefined,
   updateSchedule: () => undefined,
+  serverStatus: () => mockServer,
+  serverAuth: ({ login }) => (mockServer = { ...mockServer, signedIn: true, login, syncedAt: Date.now() }),
+  serverLogout: () => (mockServer = { ...mockServer, signedIn: false, login: null, proxyOn: false }),
+  serverSync: () => (mockServer = { ...mockServer, syncedAt: Date.now() }),
+  serverProxy: ({ on }) => (mockServer = { ...mockServer, proxyOn: on }),
   aiConfig: () => ({ baseUrl: 'https://api.example.com/v1', model: 'demo-model', enabled: true, hasKey: true }),
   aiConfigure: () => ({ baseUrl: 'https://api.example.com/v1', model: 'demo-model', enabled: true, hasKey: true }),
   aiChat: () => JSON.stringify(tracks.slice(14, 20).map((t) => ({ artist: t.artist, title: t.title, reason: 'похоже на ваши лайки' }))),

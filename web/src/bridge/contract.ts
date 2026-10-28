@@ -258,6 +258,19 @@ export interface AiConfig {
   model: string;
   enabled: boolean;
   hasKey: boolean;
+  /** The You Music account's AI is available (used when the own model is off). */
+  server?: boolean;
+}
+
+export interface ServerStatus {
+  signedIn: boolean;
+  login?: string | null;
+  syncedAt: number;
+  syncing: boolean;
+  syncError?: string | null;
+  ai: { enabled: boolean; limit: number; left: number };
+  proxyAvailable: boolean;
+  proxyOn: boolean;
 }
 
 export interface AiMessage {
@@ -365,6 +378,11 @@ export interface Commands {
   updateSchedule: [{ enabled: boolean }, void];
 
   aiConfig: [None, AiConfig];
+  serverStatus: [None, ServerStatus];
+  serverAuth: [{ login: string; password: string; register?: boolean }, ServerStatus];
+  serverLogout: [None, ServerStatus];
+  serverSync: [None, ServerStatus];
+  serverProxy: [{ on: boolean }, ServerStatus];
   aiConfigure: [{ baseUrl?: string; model?: string; key?: string; enabled?: boolean }, AiConfig];
   aiChat: [{ messages: AiMessage[]; temperature?: number }, string];
 
@@ -391,6 +409,7 @@ export interface NativeEvents {
   proxyChanged: ProxyState;
   updateState: UpdateState;
   backupState: BackupStatus;
+  serverState: ServerStatus;
   deepLink: { url: string };
   insets: Insets;
   back: Record<string, never>;

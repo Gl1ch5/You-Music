@@ -4,6 +4,7 @@ import { currentTrack, livePosition, player } from '../core/store';
 import { artFor } from '../services/art';
 import { next, previous, togglePlay } from '../services/playback';
 import { cover, haptic, likeButton, onFrame, playButton, setCoverUrls } from '../ui/components';
+import { linkArtist } from '../ui/artistLink';
 import { dragPlayer, openPlayer, releasePlayer, setMiniCoverSource } from './full';
 
 /**
@@ -16,6 +17,7 @@ export function mountMiniPlayer(): HTMLElement {
   const coverBox = h('div.mini-cover', null, art);
   const title = h('div.row-title.ellipsis');
   const artist = h('div.row-sub.ellipsis');
+  linkArtist(artist, () => currentTrack.peek());
   const swipe = h('div.mini-swipe', null, coverBox, h('div.mini-text', null, title, artist));
   const line = h('i');
   const el = h(
@@ -26,13 +28,19 @@ export function mountMiniPlayer(): HTMLElement {
     playButton(scope, { size: 'sm', flat: true, playing: () => player.wantsPlay.value, loading: () => player.buffering.value && player.wantsPlay.value, onToggle: togglePlay }),
     h('div.mini-line', null, line),
   );
+  // Transparent strip around the mini player: taps that miss it by a few pixels must not hit the list below.
+  const shield = h('div.mini-shield.hidden');
+  // A sibling, not a child: the mini player clips its overflow, including hit testing.
+  queueMicrotask(() => el.before(shield));
   setMiniCoverSource(() => (el.classList.contains('hidden') ? null : coverBox.getBoundingClientRect()));
 
   let lastId: string | null = null;
   let pendingDirection = 0;
   scope.effect(() => {
     const t = currentTrack.value;
-    el.classList.toggle('hidden', !t || player.fullOpen.value);
+    const hidden = !t || player.fullOpen.value;
+    el.classList.toggle('hidden', hidden);
+    shield.classList.toggle('hidden', hidden);
     if (!t || t.id === lastId) return;
     lastId = t.id;
     title.textContent = t.title;

@@ -6,6 +6,7 @@ import { installModFlow, mods, removeMod, setModEnabled } from '../mods/host';
 import { guard, slots } from '../mods/registry';
 import { backupNow, backupStatus, backupSub, chooseBackupFolder, disableBackupFolder, exportAll, importAll } from '../services/backup';
 import { RELEASES_URL } from '../services/playback';
+import { server } from '../services/server';
 import { saveSettings } from '../services/settings';
 import { activeTheme, allThemes, applyTheme, customThemes } from '../theme/engine';
 import { appBar, button, emptyState, listItem, switchControl, watchScroll } from '../ui/components';
@@ -45,6 +46,15 @@ defineRoute('settings', ({ scope }) => {
     const backup = backupStatus.value;
     replaceChildren(
       body,
+      group(
+        'Аккаунт',
+        listItem({
+          icon: 'cloud',
+          title: server.value.signedIn ? (server.value.login ?? 'Аккаунт') : 'Аккаунт You Music',
+          sub: server.value.signedIn ? 'Синхронизация, нейро-подборки, бесплатный прокси' : 'Необязательно: облако для музыки, 50 нейро-подборок в день, прокси',
+          onClick: () => navigate('account'),
+        }),
+      ),
       group(
         'Оформление',
         listItem({ icon: 'palette', title: 'Тема', sub: theme.name, onClick: () => pickTheme() }),

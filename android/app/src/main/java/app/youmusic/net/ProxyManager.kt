@@ -41,6 +41,21 @@ private data class StoredProxies(val proxies: List<ProxyDto> = emptyList(), val 
 class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMonitor, private val onRouteChanged: () -> Unit) {
     private var stored: StoredProxies = load()
 
+    /** Free proxy of the You Music account; kept in memory only (its credentials stay out of backups). */
+    @Volatile private var serverProxy: ProxyDto? = null
+
+    private fun all(): List<ProxyDto> = listOfNotNull(serverProxy) + stored.proxies
+
+    fun setServerProxy(proxy: ProxyDto?) {
+        if (proxy == serverProxy) return
+        serverProxy = proxy
+        if (proxy == null && stored.activeId == SERVER_ID) {
+            stored = stored.copy(activeId = stored.proxies.firstOrNull()?.id, enabled = false)
+            persist()
+        }
+        apply()
+    }
+
     private fun load() = kv.get(KEY)?.let { runCatching { BridgeJson.decodeFromString(StoredProxies.serializer(), it) }.getOrNull() } ?: StoredProxies()
 
     /** Re-reads the saved list (after restoring a backup). */
@@ -55,8 +70,10 @@ class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMo
     }
 
     fun state(): ProxyStateDto {
-        val active = stored.proxies.firstOrNull { it.id == stored.activeId }
-        return ProxyStateDto(stored.proxies, stored.activeId, stored.enabled, network.vpn, stored.enabled && active != null && !network.vpn)
+        val active = all().firstOrNull { it.id == stored.activeId }
+        // The account proxy's login and password are never shown or shared.
+        val list = all().map { if (it.id == SERVER_ID) it.copy(user = null, pass = null) else it }
+        return ProxyStateDto(list, stored.activeId, stored.enabled, network.vpn, stored.enabled && active != null && !network.vpn)
     }
 
     fun add(link: String): ProxyDto {
@@ -68,6 +85,7 @@ class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMo
     }
 
     fun remove(id: String) {
+        if (id == SERVER_ID) throw BridgeException("bad_request", "Этот прокси отключается выходом из аккаунта")
         val rest = stored.proxies.filter { it.id != id }
         save(stored.copy(proxies = rest, activeId = if (stored.activeId == id) rest.firstOrNull()?.id else stored.activeId))
     }
@@ -78,7 +96,7 @@ class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMo
 
     /** Round-trip time of a small YouTube request through the proxy, or -1 when it fails. */
     fun ping(id: String): Long {
-        val p = stored.proxies.firstOrNull { it.id == id } ?: throw BridgeException("not_found", "Прокси не найден")
+        val p = all().firstOrNull { it.id == id } ?: throw BridgeException("not_found", "Прокси не найден")
         val client = Http.withProxy(p.config()).newBuilder().callTimeout(java.time.Duration.ofSeconds(8)).build()
         val started = System.nanoTime()
         val ms = runCatching {
@@ -86,6 +104,7 @@ class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMo
                 if (it.code in 200..399) (System.nanoTime() - started) / 1_000_000 else -1L
             }
         }.getOrDefault(-1L)
+        if (id == SERVER_ID) serverProxy = serverProxy?.copy(pingMs = ms)
         stored = stored.copy(proxies = stored.proxies.map { if (it.id == id) it.copy(pingMs = ms) else it })
         persist()
         EventBus.emit("proxyChanged", state())
@@ -93,6 +112,7 @@ class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMo
     }
 
     fun shareLink(id: String): String {
+        if (id == SERVER_ID) throw BridgeException("bad_request", "Бесплатным прокси аккаунта поделиться нельзя")
         val p = stored.proxies.firstOrNull { it.id == id } ?: throw BridgeException("not_found", "Прокси не найден")
         val b = Uri.Builder().scheme("youmusic").authority(if (p.type == "http") "http" else "socks")
             .appendQueryParameter("server", p.host).appendQueryParameter("port", p.port.toString())
@@ -111,7 +131,7 @@ class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMo
 
     private fun apply(notify: Boolean = true) {
         val state = state()
-        val active = stored.proxies.firstOrNull { it.id == stored.activeId }
+        val active = all().firstOrNull { it.id == stored.activeId }
         Http.useProxy(if (state.inUse) active?.config() else null)
         if (notify) {
             onRouteChanged()
@@ -122,6 +142,7 @@ class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMo
     private fun ProxyDto.config() = ProxyConfig(type, host, port, user, pass)
 
     companion object {
+        const val SERVER_ID = "server"
         private const val KEY = "native.proxies"
         private const val PING_URL = "https://www.youtube.com/generate_204"
 

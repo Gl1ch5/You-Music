@@ -17,6 +17,8 @@ export interface Theme {
   /** intensity: opacity of the blurred cover layer; dim: opacity of the graphite layer over it. */
   dynamic: { intensity: number; dim: number };
   grain: number;
+  /** Liquid glass: translucent, blurred mini player, tab bar and sheets over a colourful backdrop. */
+  glass?: boolean;
 }
 
 export const COLOR_LABELS: Record<ColorToken, string> = {

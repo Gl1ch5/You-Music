@@ -51,6 +51,12 @@ class BackupManager(
     private val lock = Mutex()
     private var pending: Job? = null
 
+    /** Called on every library or settings change (cloud sync listens). */
+    var onDataChanged: (() -> Unit)? = null
+
+    /** Applies [import] without telling [onDataChanged] (a pull from the cloud must not trigger a push). */
+    @Volatile private var quiet = false
+
     init {
         library.onChanged = { schedule() }
         kv.onChanged = { key -> if (!key.startsWith(PREFIX)) schedule() }
@@ -59,9 +65,18 @@ class BackupManager(
     suspend fun export(): String = BridgeJson.encodeToString(LibraryExport.serializer(), snapshot())
 
     /** Restores a full backup or an old library export; returns the number of tracks. */
-    suspend fun import(json: String): Int {
+    suspend fun import(json: String, merge: Boolean = false, silent: Boolean = false): Int {
         val data = library.parse(json)
-        val count = library.importData(data)
+        quiet = silent
+        try {
+            return applyImport(data, merge)
+        } finally {
+            quiet = false
+        }
+    }
+
+    private suspend fun applyImport(data: LibraryExport, merge: Boolean): Int {
+        val count = library.importData(data, merge)
         if (data.settings.isNotEmpty()) {
             data.settings.forEach { (key, value) ->
                 when {
@@ -134,6 +149,7 @@ class BackupManager(
     }
 
     private fun schedule() {
+        if (!quiet) onDataChanged?.invoke()
         if (folderUri() == null) return
         pending?.cancel()
         pending = scope.launch {

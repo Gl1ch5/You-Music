@@ -1,4 +1,4 @@
-import { h, icon, type Child } from '../core/dom';
+import { h, icon, swallowNextClick, type Child } from '../core/dom';
 import { onBack } from './back';
 import { button } from './components';
 
@@ -19,7 +19,9 @@ export function openSheet(opts: SheetOptions): () => void {
     if (closed) return;
     closed = true;
     removeBack();
+    swallowNextClick();
     layer.classList.remove('open');
+    layer.style.pointerEvents = 'none';
     panel.style.transform = '';
     setTimeout(() => layer.remove(), 340);
     opts.onClose?.();

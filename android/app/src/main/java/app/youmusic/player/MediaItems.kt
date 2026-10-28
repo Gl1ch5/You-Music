@@ -13,7 +13,11 @@ const val YM_SCHEME = "ym"
 private const val EXTRA_TRACK = "track"
 
 fun TrackDto.playbackUri(): Uri = when (source) {
-    "yt" -> Uri.parse("$YM_SCHEME://yt/${id.removePrefix("yt:")}")
+    // Artist/title/duration ride along so an unavailable upload can be swapped for another one of the same song.
+    "yt" -> Uri.parse("$YM_SCHEME://yt/${id.removePrefix("yt:")}").buildUpon()
+        .appendQueryParameter("q", "${artist.removeSuffix(" - Topic")} $title".trim())
+        .appendQueryParameter("d", durationMs.toString())
+        .build()
     else -> Uri.parse(url ?: error("Local track without uri"))
 }
 

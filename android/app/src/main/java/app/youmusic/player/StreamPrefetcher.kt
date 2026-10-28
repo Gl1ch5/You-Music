@@ -31,6 +31,6 @@ class StreamPrefetcher(
         if (uri.scheme != YM_SCHEME) return
         val videoId = uri.lastPathSegment ?: return
         if (downloads.isDownloaded("yt:$videoId")) return
-        scope.launch { runCatching { resolver.resolve(videoId) } }
+        scope.launch { runCatching { resolver.resolveOrAlternative(videoId, uri.getQueryParameter("q"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0) } }
     }
 }
