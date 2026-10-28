@@ -153,6 +153,19 @@ export interface ImportedList {
   title: string;
   source: string;
   tracks: ImportedTrack[];
+  /** Set when Yandex was read through a free public proxy ("1.2.3.4:8080"). */
+  via?: string | null;
+}
+
+/** Basic audio data of a song (Deezer), used only by recommendations. */
+export interface TrackFeatures {
+  found: boolean;
+  bpm?: number | null;
+  /** ReplayGain-like, dB: more negative = louder master. */
+  gainDb?: number | null;
+  genres: string[];
+  explicit: boolean;
+  year?: number | null;
 }
 
 export interface Lyrics {
@@ -223,6 +236,21 @@ export interface UpdateState {
   progress: number;
   error?: string | null;
   checkedAt: number;
+  /** The downloaded APK is signed with another key: it will not install over this one. */
+  signatureMismatch?: boolean;
+}
+
+export interface BackupStatus {
+  /** Auto backup folder name; null = auto backup is off. */
+  folder?: string | null;
+  savedAt: number;
+  error?: string | null;
+}
+
+export interface BackupFolder {
+  status: BackupStatus;
+  /** The folder already holds a backup (e.g. after reinstalling). */
+  existing?: { exportedAt: number; likes: number; playlists: number; history: number } | null;
 }
 
 export interface AiConfig {
@@ -292,6 +320,7 @@ export interface Commands {
   lyrics: [{ artist: string; title: string; durationMs: number }, Lyrics];
   artworkPalette: [{ url: string }, Palette];
   importFetch: [{ url: string }, ImportedList];
+  trackFeatures: [{ tracks: { id: string; artist: string; title: string; durationMs: number }[] }, Record<string, TrackFeatures>];
 
   getLibrary: [None, Library];
   like: [{ track: Track; liked: boolean }, void];
@@ -306,6 +335,12 @@ export interface Commands {
   historyClear: [None, void];
   libraryExport: [None, string];
   libraryImport: [{ json: string }, number];
+  backupExport: [None, string];
+  backupImport: [{ json: string }, number];
+  backupStatus: [None, BackupStatus];
+  backupSetFolder: [{ enabled: boolean }, BackupFolder | null];
+  backupRestoreFolder: [None, number];
+  backupNow: [None, boolean];
 
   download: [{ tracks: Track[]; quality?: string | null }, void];
   downloadRemove: [{ id: string }, void];
@@ -355,6 +390,7 @@ export interface NativeEvents {
   network: { online: boolean; unmetered: boolean; vpn: boolean };
   proxyChanged: ProxyState;
   updateState: UpdateState;
+  backupState: BackupStatus;
   deepLink: { url: string };
   insets: Insets;
   back: Record<string, never>;

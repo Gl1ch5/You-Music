@@ -29,7 +29,19 @@ data class AiMessage(val role: String, val content: String)
  * (web/src/logic/ai.ts); the key never leaves native storage.
  */
 class AiClient(private val kv: KeyValueStore) {
-    private var stored: StoredAi = kv.get(KEY)?.let { runCatching { BridgeJson.decodeFromString(StoredAi.serializer(), it) }.getOrNull() } ?: StoredAi()
+    private var stored: StoredAi = load()
+
+    private fun load() = kv.get(KEY)?.let { runCatching { BridgeJson.decodeFromString(StoredAi.serializer(), it) }.getOrNull() } ?: StoredAi()
+
+    /** Saved settings without the API key: the key never leaves the device. */
+    fun backup(): String = BridgeJson.encodeToString(StoredAi.serializer(), stored.copy(key = ""))
+
+    /** Restores [backup] output, keeping the key already on this device. */
+    fun restore(raw: String) {
+        val restored = runCatching { BridgeJson.decodeFromString(StoredAi.serializer(), raw) }.getOrNull() ?: return
+        stored = restored.copy(key = stored.key)
+        kv.set(KEY, BridgeJson.encodeToString(StoredAi.serializer(), stored))
+    }
 
     fun config() = AiConfigDto(stored.baseUrl, stored.model, stored.enabled, stored.key.isNotEmpty())
 
@@ -66,6 +78,6 @@ class AiClient(private val kv: KeyValueStore) {
     private data class ChatRequest(val model: String, val messages: List<AiMessage>, val temperature: Double)
 
     companion object {
-        private const val KEY = "native.ai"
+        const val KEY = "native.ai"
     }
 }

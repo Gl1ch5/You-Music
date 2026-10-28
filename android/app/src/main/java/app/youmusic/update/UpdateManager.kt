@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.os.Build
 import app.youmusic.BuildConfig
 import app.youmusic.bridge.BridgeException
@@ -41,6 +42,8 @@ data class UpdateStateDto(
     val progress: Float = 0f,
     val error: String? = null,
     val checkedAt: Long = 0,
+    /** The downloaded APK is signed with another key: Android will not install it over this one. */
+    val signatureMismatch: Boolean = false,
 )
 
 /**
@@ -79,7 +82,12 @@ class UpdateManager(private val context: Context, private val kv: KeyValueStore)
         }
         val newer = info.versionCode > BuildConfig.VERSION_CODE
         val ready = newer && apkFile(info).exists()
-        set(state.copy(latest = info, status = if (!newer) "uptodate" else if (ready) "ready" else "available", progress = if (ready) 1f else 0f, checkedAt = System.currentTimeMillis()))
+        set(
+            state.copy(
+                latest = info, status = if (!newer) "uptodate" else if (ready) "ready" else "available", progress = if (ready) 1f else 0f,
+                checkedAt = System.currentTimeMillis(), signatureMismatch = ready && !sameSigner(apkFile(info)),
+            ),
+        )
         if (newer && !ready && autoDownload) downloadLocked(info)
         return state
     }
@@ -92,7 +100,7 @@ class UpdateManager(private val context: Context, private val kv: KeyValueStore)
 
     private fun downloadLocked(info: VersionInfoDto) {
         val target = apkFile(info)
-        if (target.exists()) return set(state.copy(status = "ready", progress = 1f))
+        if (target.exists()) return set(state.copy(status = "ready", progress = 1f, signatureMismatch = !sameSigner(target)))
         dir.listFiles()?.forEach { it.delete() }
         val part = File(target.path + ".part")
         set(state.copy(status = "downloading", progress = 0f))
@@ -120,16 +128,21 @@ class UpdateManager(private val context: Context, private val kv: KeyValueStore)
                 }
             }
             if (!part.renameTo(target)) throw IOException("Не удалось сохранить APK")
-            set(state.copy(status = "ready", progress = 1f))
+            set(state.copy(status = "ready", progress = 1f, signatureMismatch = !sameSigner(target)))
         } catch (e: Exception) {
             part.delete()
             set(state.copy(status = "error", error = e.message))
         }
     }
 
-    fun install() {
+    /** Runs before every install: the auto backup is refreshed so nothing is lost if the update goes wrong. */
+    var beforeInstall: (suspend () -> Unit)? = null
+
+    suspend fun install() {
         val info = state.latest ?: throw BridgeException("bad_request", "Нет загруженного обновления")
         val file = apkFile(info).takeIf { it.exists() } ?: throw BridgeException("bad_request", "APK ещё не скачан")
+        runCatching { beforeInstall?.invoke() }
+        if (!sameSigner(file)) throw BridgeException("signature", SIGNATURE_HINT)
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
@@ -157,8 +170,29 @@ class UpdateManager(private val context: Context, private val kv: KeyValueStore)
 
     private fun apkFile(info: VersionInfoDto) = File(dir, "you-music-${info.versionCode}.apk")
 
+    /** True when the APK is signed like the installed app, or when Android cannot tell (then the installer decides). */
+    private fun sameSigner(apk: File): Boolean = runCatching {
+        val pm = context.packageManager
+        if (Build.VERSION.SDK_INT >= 28) {
+            val flags = PackageManager.GET_SIGNING_CERTIFICATES
+            val installed = pm.getPackageInfo(context.packageName, flags).signingInfo?.apkContentsSigners.orEmpty()
+            val archive = pm.getPackageArchiveInfo(apk.path, flags)?.signingInfo?.apkContentsSigners ?: return@runCatching true
+            installed.map { it.toCharsString() }.toSet() == archive.map { it.toCharsString() }.toSet()
+        } else {
+            @Suppress("DEPRECATION")
+            val flags = PackageManager.GET_SIGNATURES
+            @Suppress("DEPRECATION")
+            val installed = pm.getPackageInfo(context.packageName, flags).signatures.orEmpty()
+            @Suppress("DEPRECATION")
+            val archive = pm.getPackageArchiveInfo(apk.path, flags)?.signatures ?: return@runCatching true
+            installed.map { it.toCharsString() }.toSet() == archive.map { it.toCharsString() }.toSet()
+        }
+    }.getOrDefault(true)
+
     companion object {
         const val REPO = "https://github.com/Gl1ch5/You-Music"
+        const val SIGNATURE_HINT = "Новая сборка подписана другим ключом — Android не поставит её поверх. " +
+            "Сделайте «Экспорт всего» (или включите автокопию), удалите приложение, установите APK и восстановите копию."
     }
 }
 
@@ -177,7 +211,7 @@ class InstallResultReceiver : BroadcastReceiver() {
             else -> {
                 val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 val hint = if (status == PackageInstaller.STATUS_FAILURE_CONFLICT || status == PackageInstaller.STATUS_FAILURE_INCOMPATIBLE)
-                    "Подпись новой сборки не совпадает с установленной — удалите приложение и поставьте APK вручную один раз."
+                    UpdateManager.SIGNATURE_HINT
                 else msg
                 manager.onInstallResult(false, hint ?: "Установка не удалась")
             }

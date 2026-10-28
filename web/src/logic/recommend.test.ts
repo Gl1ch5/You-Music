@@ -106,3 +106,24 @@ describe('Wave', () => {
     expect(idx === -1 || idx === rest.length - 1).toBe(true);
   });
 });
+
+describe('Wave vibe', () => {
+  const calm = { energy: 0.1, aggression: 0.1, tempo: 0.2, dance: 0.3 };
+  const harsh = { energy: 0.9, aggression: 0.95, tempo: 0.8, dance: 0.5 };
+
+  it('grows from the seed only and prefers candidates with the seed vibe', async () => {
+    const seed = t('seed', 'Seed Artist');
+    const a = t('loud', 'Loud');
+    const b = t('soft', 'Soft');
+    const source: RecoSource = {
+      signals: async () => ({ likes: [like(t('liked', 'Other'))], history: [], now: NOW }),
+      // The calm track ranks higher by position; the vibe must outweigh it.
+      related: async (track) => (track.id === 'seed' ? [b, a] : []),
+      vibes: async (tracks) => new Map(tracks.map((x) => [x.id, x.id === 'soft' ? calm : harsh])),
+    };
+    const wave = new Wave(source, 'mix', () => 0.5, seed);
+    const first = await wave.next(2);
+    expect(first.map((x) => x.id)).toEqual(['loud', 'soft']);
+    expect(first.some((x) => x.id === 'seed')).toBe(false);
+  });
+});

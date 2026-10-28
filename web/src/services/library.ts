@@ -18,7 +18,10 @@ export async function refreshLibrary(): Promise<void> {
 const refreshSoon = debounce(() => refreshLibrary().catch(console.error), 150);
 
 export function initLibrary(): void {
-  onNative('libraryChanged', refreshSoon);
+  // History is not part of the library: re-reading it on every play rebuilt open lists and reset their scroll.
+  onNative('libraryChanged', ({ what }) => {
+    if (what !== 'history') refreshSoon();
+  });
   onNative('downloadProgress', (d: Download) => {
     const map = new Map(app.downloads.peek());
     if (d.status === 'removed') map.delete(d.trackId);
@@ -70,4 +73,22 @@ export async function addToPlaylist(id: number, tracks: Track[]): Promise<void> 
   await call('playlistAdd', { id, tracks });
   const name = app.playlists.peek().find((p) => p.id === id)?.name ?? 'плейлист';
   toast(`Добавлено в «${name}»`, { icon: 'check' });
+}
+
+/** Tracks from `tracks` that are neither downloaded nor already queued for download. */
+export const notDownloaded = (tracks: Track[]) => tracks.filter((t) => t.source === 'yt' && !app.downloads.peek().has(t.id));
+
+export async function downloadLikes(): Promise<void> {
+  const rest = notDownloaded(app.likes.peek().map((l) => l.track));
+  if (!rest.length) return toast('Все лайки уже скачаны', { icon: 'downloaded' });
+  await download(rest);
+}
+
+/** Likes plus every playlist, without duplicates. */
+export async function downloadFavorites(): Promise<void> {
+  const pages = await Promise.all(app.playlists.peek().map((p) => call('playlistGet', { id: p.id }).catch(() => null)));
+  const all = [...app.likes.peek().map((l) => l.track), ...pages.flatMap((p) => p?.tracks ?? [])];
+  const rest = notDownloaded([...new Map(all.map((t) => [t.id, t])).values()]);
+  if (!rest.length) return toast('Избранное уже скачано целиком', { icon: 'downloaded' });
+  await download(rest);
 }

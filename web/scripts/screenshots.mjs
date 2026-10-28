@@ -30,10 +30,10 @@ const tab = (label) => page.click(`.tab[aria-label="${label}"]`);
 const back = () => page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
 
 await page.goto('http://localhost:4173/index.html');
-await page.waitForSelector('.wave-hero');
+await page.waitForSelector('.stream-row');
 await shot('01-home');
 
-await page.click('.wave-hero .play-btn');
+await page.click('.stream-row button');
 await wait(800);
 await shot('02-home-playing');
 
@@ -79,9 +79,10 @@ await back();
 await tab('Главная');
 await page.click('.page-head .btn-icon');
 await shot('11-settings');
-await page.click('.item:has-text("Прокси")');
+await page.click('.item:has(.item-main > div:text-is("Прокси"))');
 await shot('15-proxy');
 await back();
+await wait(500);
 await page.click('.item:has-text("Обновления")');
 await shot('16-updates');
 await back();

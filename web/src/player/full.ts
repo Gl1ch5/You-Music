@@ -8,9 +8,9 @@ import { mutedGlow } from '../theme/engine';
 import { artFor } from '../services/art';
 import { related } from '../services/catalog';
 import { download, removeDownload } from '../services/library';
-import { expectLoading, next, playTracks, previous, seek, togglePlay } from '../services/playback';
+import { expectLoading, next, playTrackWave, playTracks, previous, seek, togglePlay } from '../services/playback';
 import { onBack } from '../ui/back';
-import { emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
+import { button, emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
 import { applyDynamicBackground } from '../ui/hero';
 import { openSheet } from '../ui/sheet';
 import { openTrackMenu } from '../ui/trackMenu';
@@ -138,8 +138,20 @@ function setY(y: number, animate: boolean): void {
   root.style.transform = `translateY(${y}px)`;
 }
 
+/** Swallows the click that may follow the gesture which opened the player, so it never reaches the list below. */
+function swallowNextClick(): void {
+  const stop = (e: Event) => {
+    if ((e.target as HTMLElement).closest?.('.player')) return;
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  document.addEventListener('click', stop, true);
+  setTimeout(() => document.removeEventListener('click', stop, true), 400);
+}
+
 export function openPlayer(): void {
   if (!currentTrack.peek()) return;
+  swallowNextClick();
   const height = window.innerHeight;
   root.classList.add('open');
   root.setAttribute('aria-hidden', 'false');
@@ -212,6 +224,7 @@ export function dragPlayer(progress: number): void {
 }
 
 export function releasePlayer(open: boolean): void {
+  swallowNextClick();
   if (open) {
     root.classList.add('open');
     root.setAttribute('aria-hidden', 'false');
@@ -349,12 +362,19 @@ function openSimilar(): void {
   const t = currentTrack.peek();
   if (!t) return;
   const body = h('div', null, skeletonRows(6));
-  openSheet({ header: h('div.h2', null, 'Похожие'), content: body });
+  const close = openSheet({ header: h('div.h2', null, 'Похожие'), content: body });
+  const waveBtn = t.source === 'yt'
+    ? h('div.pad', { style: { marginBottom: 'var(--s-2)' } }, button('Волна по этому треку', () => {
+        close();
+        playTrackWave(t);
+      }, { cls: 'primary block', icon: 'wave' }))
+    : null;
   related(t)
     .then((tracks) => {
       const list = tracks.filter((x) => x.durationMs < 15 * 60_000);
       replaceChildren(
         body,
+        waveBtn,
         list.length
           ? list.map((x: Track, i) => trackRow(x, { onPlay: () => playTracks(list, i, { kind: 'list', title: `Похоже на «${t.title}»` }), onMore: () => openTrackMenu(x) }))
           : emptyState('similar', 'Ничего похожего', t.source === 'local' ? 'Для своих файлов похожие не ищутся.' : undefined),

@@ -10,6 +10,7 @@ import app.youmusic.ai.AiClient
 import app.youmusic.art.ArtworkProcessor
 import app.youmusic.data.AppDatabase
 import app.youmusic.data.AppPaths
+import app.youmusic.data.BackupManager
 import app.youmusic.data.KeyValueStore
 import app.youmusic.data.LibraryRepository
 import app.youmusic.download.DownloadRepository
@@ -21,6 +22,7 @@ import app.youmusic.update.UpdateManager
 import app.youmusic.update.UpdateWorker
 import app.youmusic.player.PlaybackDataSourceFactory
 import app.youmusic.player.PlayerController
+import app.youmusic.source.FeaturesRepository
 import app.youmusic.source.ImportRepository
 import app.youmusic.source.LyricsRepository
 import app.youmusic.source.NewPipeHttp
@@ -53,9 +55,11 @@ class AppGraph(app: Application) {
     val artwork = ArtworkProcessor(paths)
     val lyrics = LyricsRepository()
     val importer = ImportRepository()
+    val features = FeaturesRepository(java.io.File(app.filesDir, "features.json"))
     val proxies = ProxyManager(kv, network) { dropStreamUrls() }
     val updates = UpdateManager(app, kv)
     val ai = AiClient(kv)
+    val backup = BackupManager(app, library, kv, proxies, ai, appScope)
     val mediaCache = SimpleCache(
         paths.media,
         LeastRecentlyUsedCacheEvictor(kv.settings.cacheLimitMb.coerceIn(64, 8192).toLong() shl 20),
@@ -65,6 +69,7 @@ class AppGraph(app: Application) {
     val player = PlayerController(app, paths, appScope)
 
     init {
+        updates.beforeInstall = { backup.saveNow() }
         // A new public IP (VPN on/off, Wi-Fi ↔ mobile) invalidates googlevideo URLs.
         network.onChange { _, _ -> dropStreamUrls() }
     }

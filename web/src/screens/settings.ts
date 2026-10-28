@@ -4,7 +4,7 @@ import { formatBytes, h, replaceChildren } from '../core/dom';
 import { app, type Settings } from '../core/store';
 import { installModFlow, mods, removeMod, setModEnabled } from '../mods/host';
 import { guard, slots } from '../mods/registry';
-import { refreshLibrary } from '../services/library';
+import { backupNow, backupStatus, backupSub, chooseBackupFolder, disableBackupFolder, exportAll, importAll } from '../services/backup';
 import { RELEASES_URL } from '../services/playback';
 import { saveSettings } from '../services/settings';
 import { activeTheme, allThemes, applyTheme, customThemes } from '../theme/engine';
@@ -42,6 +42,7 @@ defineRoute('settings', ({ scope }) => {
     const s = app.settings.value;
     const theme = activeTheme.value;
     const v = app.version.value;
+    const backup = backupStatus.value;
     replaceChildren(
       body,
       group(
@@ -81,9 +82,18 @@ defineRoute('settings', ({ scope }) => {
         }, { cls: 'ghost' })),
       ),
       group(
+        'Резервная копия',
+        listItem({
+          icon: 'folder',
+          title: 'Автокопия в папку',
+          sub: backupSub(backup),
+          onClick: () => (backup.folder ? backupMenu() : chooseBackupFolder()),
+        }),
+        listItem({ icon: 'export', title: 'Экспорт всего', sub: 'Лайки, плейлисты, история, настройки, темы и прокси (без ключа нейросети)', onClick: exportAll }),
+        listItem({ icon: 'import', title: 'Импорт всего', sub: 'Из файла копии или старого экспорта библиотеки', onClick: importAll }),
+      ),
+      group(
         'Библиотека',
-        listItem({ icon: 'export', title: 'Экспорт библиотеки', sub: 'Лайки и плейлисты в JSON', onClick: exportLibrary }),
-        listItem({ icon: 'import', title: 'Импорт библиотеки', sub: 'Из файла экспорта', onClick: importLibrary }),
         listItem({ icon: 'playlist', title: 'Перенос из Spotify и Яндекс Музыки', sub: 'По ссылке, списком или CSV', onClick: () => navigate('import') }),
       ),
       group(
@@ -128,22 +138,12 @@ function pickTheme(): void {
   );
 }
 
-async function exportLibrary(): Promise<void> {
-  const json = await call('libraryExport');
-  const date = new Date().toISOString().slice(0, 10);
-  if (await call('saveTextFile', { name: `you-music-library-${date}.json`, text: json, mime: 'application/json' })) toast('Библиотека сохранена', { icon: 'check' });
-}
-
-async function importLibrary(): Promise<void> {
-  const file = await call('pickTextFile', { mime: 'application/json' });
-  if (!file) return;
-  try {
-    const n = await call('libraryImport', { json: file.text });
-    await refreshLibrary();
-    toast(`Импортировано треков: ${n}`, { icon: 'check' });
-  } catch (e) {
-    toast((e as Error).message, { icon: 'alert' });
-  }
+function backupMenu(): void {
+  actionSheet(h('div.h2', null, 'Автокопия'), [
+    { icon: 'check', label: 'Сохранить сейчас', run: () => backupNow() },
+    { icon: 'folder', label: 'Выбрать другую папку', run: () => chooseBackupFolder() },
+    { icon: 'close', label: 'Выключить', run: () => disableBackupFolder() },
+  ]);
 }
 
 defineRoute('mods', ({ scope }) => {

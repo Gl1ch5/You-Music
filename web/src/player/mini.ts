@@ -64,6 +64,7 @@ export function mountMiniPlayer(): HTMLElement {
   let mode: 'none' | 'h' | 'v' = 'none';
   let dx = 0;
   let dy = 0;
+  let dragged = false;
 
   el.addEventListener('pointerdown', (e) => {
     if ((e.target as HTMLElement).closest('button')) return;
@@ -72,6 +73,7 @@ export function mountMiniPlayer(): HTMLElement {
     startT = performance.now();
     mode = 'none';
     dx = dy = 0;
+    dragged = false;
     el.setPointerCapture(e.pointerId);
   });
   el.addEventListener('pointermove', (e) => {
@@ -91,9 +93,8 @@ export function mountMiniPlayer(): HTMLElement {
     if (!el.hasPointerCapture(e.pointerId)) return;
     el.releasePointerCapture(e.pointerId);
     const dt = Math.max(1, performance.now() - startT);
-    if (mode === 'none') {
-      openPlayer();
-    } else if (mode === 'h') {
+    dragged = mode !== 'none';
+    if (mode === 'h') {
       swipe.style.transition = '';
       if (Math.abs(dx) > 80 || Math.abs(dx) / dt > 0.5) {
         pendingDirection = dx < 0 ? 1 : -1;
@@ -121,5 +122,11 @@ export function mountMiniPlayer(): HTMLElement {
   };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
+  // Open on `click`, not on pointerup: hiding the mini player before the click is dispatched would let that
+  // click land on the track row underneath and start it.
+  el.addEventListener('click', (e) => {
+    if (dragged || (e.target as HTMLElement).closest('button')) return;
+    openPlayer();
+  });
   return el;
 }

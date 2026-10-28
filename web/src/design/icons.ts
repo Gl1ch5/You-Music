@@ -36,6 +36,7 @@ export const graphiteIcons: IconSet = {
   'library-fill': '<rect x="4" y="9.5" width="16" height="10.5" rx="2.5" fill="currentColor"/><path d="M6.5 6.3h11M9 3.3h6"/>',
   queue: '<path d="M4 6.5h16M4 11.5h16M4 16.5h8.5"/><path d="M16 14.5v5.2l4.2-2.6z" fill="currentColor"/>',
   lyrics: '<path d="M4.5 5.5h15M4.5 10h15M4.5 14.5h8.5M4.5 19h5.5"/><path d="M18.2 13v5.6"/><circle cx="16.6" cy="18.6" r="1.6"/>',
+  filter: '<path d="M4 7h16M7 12h10M10 17h4"/>',
   similar: '<circle cx="8.5" cy="12" r="4.6"/><circle cx="15.5" cy="12" r="4.6"/>',
   download: '<path d="M12 4v11"/><path d="m7.2 10.6 4.8 4.8 4.8-4.8"/><path d="M5 19.6h14"/>',
   downloaded: filledMasked('dl', '<circle cx="12" cy="12" r="9"/>', '<path d="M12 7v8.2" stroke-width="1.6"/><path d="m8.6 12 3.4 3.4 3.4-3.4" stroke-width="1.6"/>'),

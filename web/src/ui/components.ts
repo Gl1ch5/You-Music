@@ -238,8 +238,10 @@ export function progressBar(scope: Scope, onSeek: (ms: number) => void): { el: H
   const remaining = h('time');
   let dragging: number | null = null;
 
+  // While a stream loads the player reports 0: fall back to the track's own length so the times never vanish.
+  const durationNow = () => player.position.peek().durationMs || currentTrack.peek()?.durationMs || 0;
   const render = () => {
-    const duration = player.position.peek().durationMs;
+    const duration = durationNow();
     const pos = dragging ?? livePosition();
     const ratio = duration > 0 ? Math.min(1, pos / duration) : 0;
     fill.style.transform = `scaleX(${ratio})`;
@@ -254,10 +256,10 @@ export function progressBar(scope: Scope, onSeek: (ms: number) => void): { el: H
 
   const at = (e: PointerEvent) => {
     const r = el.getBoundingClientRect();
-    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * player.position.peek().durationMs;
+    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * durationNow();
   };
   el.addEventListener('pointerdown', (e) => {
-    if (!player.position.peek().durationMs) return;
+    if (!durationNow()) return;
     el.setPointerCapture(e.pointerId);
     el.classList.add('active');
     dragging = at(e);

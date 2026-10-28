@@ -5,7 +5,7 @@ import { h, icon } from '../core/dom';
 import { app, likedIds } from '../core/store';
 import { guard, slots } from '../mods/registry';
 import { addToPlaylist, createPlaylist, download, removeDownload, toggleLike } from '../services/library';
-import { addToQueue } from '../services/playback';
+import { addToQueue, playTrackWave } from '../services/playback';
 import { cover, trackCover } from './components';
 import { actionSheet, openSheet, promptSheet, type Action } from './sheet';
 
@@ -29,6 +29,7 @@ export function openTrackMenu(track: Track, extras: MenuExtras = {}): void {
     { icon: 'plus', label: 'Добавить в плейлист', run: () => pickPlaylist([track]) },
   ];
   if (track.source === 'yt') {
+    actions.push({ icon: 'wave', label: 'Волна по треку', sub: 'Похожие по звучанию и настроению', run: () => playTrackWave(track) });
     actions.push(
       dl
         ? { icon: 'trash', label: dl.status === 'done' ? 'Удалить загрузку' : 'Отменить загрузку', run: () => removeDownload(track.id) }

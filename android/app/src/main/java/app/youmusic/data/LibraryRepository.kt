@@ -17,11 +17,14 @@ data class LibraryChangedDto(val what: String)
 @Serializable
 data class LibraryExport(
     val format: String = "you-music-library",
-    val version: Int = 1,
+    val version: Int = 2,
     val exportedAt: Long,
     val tracks: List<TrackDto>,
     val likes: List<ExportLike>,
     val playlists: List<ExportPlaylist>,
+    /** Since version 2 (full backup): listening history and UI/native settings. */
+    val history: List<ExportHistory> = emptyList(),
+    val settings: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -29,6 +32,9 @@ data class ExportLike(val trackId: String, val likedAt: Long)
 
 @Serializable
 data class ExportPlaylist(val name: String, val trackIds: List<String>)
+
+@Serializable
+data class ExportHistory(val trackId: String, val playedAt: Long, val listenedMs: Long, val durationMs: Long, val completed: Boolean, val skipped: Boolean)
 
 class LibraryRepository(private val db: AppDatabase) {
 
@@ -129,38 +135,71 @@ class LibraryRepository(private val db: AppDatabase) {
         db.tracks().delete(id)
     }
 
-    suspend fun export(): String {
+    suspend fun export(): String = BridgeJson.encodeToString(LibraryExport.serializer(), exportData(withHistory = false))
+
+    /** Likes, playlists and (optionally) history with the tracks they reference. Local files are skipped: their URIs die with the app. */
+    suspend fun exportData(withHistory: Boolean): LibraryExport {
         val likes = db.likes().all()
         val playlists = db.playlists().summaries().map { ExportPlaylist(it.name, db.playlists().trackIds(it.id)) }
-        val ids = (likes.map { it.track.id } + playlists.flatMap { it.trackIds }).distinct()
-        val tracks = ids.chunked(500).flatMap { db.tracks().getAll(it) }.map { it.toDto() }
-        val export = LibraryExport(
+        val history = if (withHistory) db.history().entries(HISTORY_LIMIT) else emptyList()
+        val ids = (likes.map { it.track.id } + playlists.flatMap { it.trackIds } + history.map { it.trackId }).distinct()
+        val tracks = ids.chunked(500).flatMap { db.tracks().getAll(it) }.map { it.toDto() }.filter { it.source != "local" }
+        val known = tracks.map { it.id }.toHashSet()
+        return LibraryExport(
             exportedAt = System.currentTimeMillis(),
-            tracks = tracks.filter { it.source != "local" },
-            likes = likes.filter { it.track.source != "local" }.map { ExportLike(it.track.id, it.likedAt) },
+            tracks = tracks,
+            likes = likes.filter { it.track.id in known }.map { ExportLike(it.track.id, it.likedAt) },
             playlists = playlists,
+            history = history.filter { it.trackId in known }.map { ExportHistory(it.trackId, it.playedAt, it.listenedMs, it.durationMs, it.completed, it.skipped) },
         )
-        return BridgeJson.encodeToString(LibraryExport.serializer(), export)
     }
 
-    /** Merges an export into the library: likes are added, playlists are appended as new ones. */
-    suspend fun import(json: String): Int {
-        val data = runCatching { BridgeJson.decodeFromString(LibraryExport.serializer(), json) }
-            .getOrElse { throw BridgeException("bad_request", "Файл не похож на экспорт библиотеки") }
-        if (data.format != "you-music-library") throw BridgeException("bad_request", "Неизвестный формат файла")
+    suspend fun import(json: String): Int = importData(parse(json))
+
+    /**
+     * Merges an export into the library: likes and history are added (no duplicates),
+     * a playlist with the same name is replaced instead of being duplicated.
+     */
+    suspend fun importData(data: LibraryExport): Int {
         val known = data.tracks.map { it.id }.toHashSet()
         db.withTransaction {
             db.tracks().upsert(data.tracks.map(TrackEntity::from))
             db.likes().insertAll(data.likes.filter { it.trackId in known }.map { LikeEntity(it.trackId, it.likedAt) })
             val now = System.currentTimeMillis()
+            val existing = db.playlists().summaries().groupBy { it.name }
             data.playlists.forEach { p ->
-                val id = db.playlists().insert(PlaylistEntity(name = p.name, createdAt = now, updatedAt = now))
+                val id = existing[p.name]?.firstOrNull()?.id
+                    ?: db.playlists().insert(PlaylistEntity(name = p.name, createdAt = now, updatedAt = now))
                 db.playlists().replaceTracks(id, p.trackIds.filter { it in known }.distinct(), now)
+            }
+            if (data.history.isNotEmpty()) {
+                val seen = db.history().keys().toHashSet()
+                db.history().insertAll(
+                    data.history.filter { it.trackId in known && "${it.trackId}:${it.playedAt}" !in seen }
+                        .map { HistoryEntity(trackId = it.trackId, playedAt = it.playedAt, listenedMs = it.listenedMs, durationMs = it.durationMs, completed = it.completed, skipped = it.skipped) },
+                )
             }
         }
         changed("all")
         return data.tracks.size
     }
 
-    private fun changed(what: String) = EventBus.emit("libraryChanged", LibraryChangedDto(what))
+    fun parse(json: String): LibraryExport {
+        val data = runCatching { BridgeJson.decodeFromString(LibraryExport.serializer(), json) }
+            .getOrElse { throw BridgeException("bad_request", "Файл не похож на экспорт библиотеки") }
+        if (data.format != "you-music-library") throw BridgeException("bad_request", "Неизвестный формат файла")
+        return data
+    }
+
+    private fun changed(what: String) {
+        EventBus.emit("libraryChanged", LibraryChangedDto(what))
+        if (what != "history") onChanged?.invoke()
+    }
+
+    /** Called after likes/playlists change (the auto backup listens). */
+    var onChanged: (() -> Unit)? = null
+
+    companion object {
+        private const val HISTORY_LIMIT = 5000
+    }
 }

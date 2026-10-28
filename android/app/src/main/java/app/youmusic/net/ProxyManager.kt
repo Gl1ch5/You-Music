@@ -39,7 +39,15 @@ private data class StoredProxies(val proxies: List<ProxyDto> = emptyList(), val 
  * Never used while a system VPN is active — the VPN already routes traffic and stacking both breaks playback.
  */
 class ProxyManager(private val kv: KeyValueStore, private val network: NetworkMonitor, private val onRouteChanged: () -> Unit) {
-    private var stored: StoredProxies = kv.get(KEY)?.let { runCatching { BridgeJson.decodeFromString(StoredProxies.serializer(), it) }.getOrNull() } ?: StoredProxies()
+    private var stored: StoredProxies = load()
+
+    private fun load() = kv.get(KEY)?.let { runCatching { BridgeJson.decodeFromString(StoredProxies.serializer(), it) }.getOrNull() } ?: StoredProxies()
+
+    /** Re-reads the saved list (after restoring a backup). */
+    fun reload() {
+        stored = load()
+        apply()
+    }
 
     init {
         apply(notify = false)

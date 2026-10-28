@@ -28,6 +28,7 @@ import { initPlayback, restorePlayer } from './services/playback';
 import { loadSettings } from './services/settings';
 import { refreshAiConfig } from './services/ai';
 import { initDeepLinks } from './services/deeplink';
+import { initBackup } from './services/backup';
 import { initUpdates } from './services/updates';
 import { loadThemes } from './theme/engine';
 import { handleBack, onBack } from './ui/back';
@@ -70,6 +71,7 @@ async function boot(): Promise<void> {
 
   await Promise.all([refreshLibrary().catch(console.error), restorePlayer(), refreshAiConfig()]);
   initUpdates();
+  initBackup();
   initDeepLinks();
   app.ready.value = true;
   document.documentElement.classList.add('ready');

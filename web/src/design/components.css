@@ -681,7 +681,7 @@
   position: relative;
   width: 100%;
   height: var(--progress-active);
-  transform: scaleY(calc(2 / 6));
+  transform: scaleY(calc(4 / 6));
   border-radius: var(--r-pill);
   background: var(--line);
   overflow: hidden;
@@ -744,6 +744,7 @@
 .times {
   display: flex;
   justify-content: space-between;
+  margin-top: calc(var(--s-1) * -1);
   font-size: var(--fs-small);
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
@@ -934,8 +935,8 @@
 }
 
 .player-title {
-  font-size: 22px;
-  line-height: 28px;
+  font-size: 24px;
+  line-height: 30px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -949,7 +950,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--s-2) 0 var(--s-4);
+  margin: var(--s-3) 0 var(--s-5);
 }
 
 .player-controls .btn-icon.big .icon {
@@ -963,8 +964,7 @@
 .player-actions {
   display: flex;
   justify-content: space-around;
-  border-top: 1px solid var(--line);
-  padding-top: var(--s-2);
+  gap: var(--s-1);
 }
 
 .action {
@@ -974,7 +974,8 @@
   flex-direction: column;
   align-items: center;
   gap: var(--s-1);
-  padding: var(--s-1) 0;
+  padding: var(--s-2) 0;
+  border-radius: var(--r-card);
   color: var(--text-2);
   font-size: var(--fs-tiny);
   font-weight: 500;
@@ -1321,79 +1322,91 @@ input[type='color']::-webkit-color-swatch {
   margin-top: var(--s-2);
 }
 
-.wave-hero {
-  position: relative;
-  margin: var(--s-2) var(--gutter) 0;
-  border-radius: var(--r-card);
+/* ───────── Home ───────── */
+.section.first {
+  margin-top: var(--s-2);
+}
+
+.filter-pill {
+  height: 32px;
+  padding: 0 var(--s-3) 0 var(--s-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  border-radius: var(--r-pill);
   border: 1px solid var(--line);
-  background: var(--surface);
-  padding: var(--s-6) var(--s-4) var(--s-4);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  flex: none;
+  transition: transform var(--t-press) var(--ease);
+}
+
+.filter-pill:active {
+  transform: scale(0.96);
+}
+
+.stream-row {
+  margin: 0 var(--gutter) var(--s-4);
+  padding: var(--s-2) var(--s-3) var(--s-2) var(--s-2);
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: var(--s-3);
-  overflow: hidden;
-}
-
-.wave-rings {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  display: grid;
-  place-items: center;
-}
-
-.wave-rings i {
-  position: absolute;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
+  border-radius: var(--r-card);
+  background: var(--surface);
   border: 1px solid var(--line);
-  animation: ring 6s var(--ease) infinite;
+  transition: transform var(--t-press) var(--ease);
 }
 
-.wave-rings i:nth-child(2) {
-  animation-delay: -2s;
+.stream-row:active {
+  transform: scale(0.98);
 }
 
-.wave-rings i:nth-child(3) {
-  animation-delay: -4s;
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-4) var(--s-3);
+  padding: 0 var(--gutter);
 }
 
-.wave-rings.paused i {
-  animation-play-state: paused;
+.card-grid .card {
+  width: auto;
+  min-width: 0;
 }
 
-@keyframes ring {
-  from {
-    transform: scale(0.5);
-    opacity: 0;
-  }
-  30% {
-    opacity: 1;
-  }
-  to {
-    transform: scale(1.8);
-    opacity: 0;
-  }
+.card-grid .card .cover,
+.skeleton.square {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
 }
 
-.wave-title {
-  font-size: 40px;
-  line-height: 44px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-}
-
-.now-pill {
-  max-width: 100%;
+.button-row {
   display: flex;
-  align-items: center;
   gap: var(--s-2);
-  padding: var(--s-1) var(--s-1) var(--s-1) var(--s-4);
-  border-radius: var(--r-pill);
-  background: var(--surface-2);
-  font-size: var(--fs-small);
+  padding: var(--s-2) var(--gutter) 0;
+}
+
+.button-row .btn {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--s-3);
+}
+
+/* Download-all button: a ring around the glyph fills as tracks become available offline. */
+.dl-all {
+  position: relative;
+}
+
+.dl-all::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--dl, 0) * 360deg), var(--line) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), var(--text) calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), var(--text) calc(100% - 1.5px));
+  pointer-events: none;
 }
 
 .banner {

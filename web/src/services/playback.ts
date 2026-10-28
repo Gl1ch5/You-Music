@@ -6,6 +6,7 @@ import { hooks, runHooks } from '../mods/registry';
 import { toast } from '../ui/toast';
 import { aiSuggest } from './ai';
 import { related } from './catalog';
+import { vibesOf } from './features';
 import { uiBus } from './events';
 
 export const RELEASES_URL = 'https://github.com/Gl1ch5/You-Music/releases/latest';
@@ -19,6 +20,7 @@ export const recoSource: RecoSource = {
     now: Date.now(),
   }),
   related,
+  vibes: vibesOf,
 };
 
 let wave: Wave | null = null;
@@ -51,21 +53,43 @@ export async function playTracks(tracks: Track[], index: number, context: PlayCo
 export async function playWave(): Promise<void> {
   if (!app.online.peek()) {
     const offline = [...app.likes.peek().map((l) => l.track), ...app.local.peek()].filter(isPlayable);
-    if (!offline.length) return toast('Без сети волна играет скачанное — пока его нет', { icon: 'offline' });
+    if (!offline.length) return toast('Без сети поток играет скачанное — пока его нет', { icon: 'offline' });
     wave = null;
-    return playTracks(shuffle(offline), 0, { kind: 'wave', title: 'Волна · офлайн' });
+    return playTracks(shuffle(offline), 0, { kind: 'wave', title: 'Поток · офлайн' });
   }
   wave = createWave();
   let first = await wave.next(8).catch(() => [] as Track[]);
   first = await runHooks(hooks.recommendations, first, { source: 'wave' });
   if (!first.length) {
     const likes = app.likes.peek().map((l) => l.track);
-    if (!likes.length) return toast('Поставьте пару лайков — волне нужно от чего оттолкнуться', { icon: 'sparkle' });
+    if (!likes.length) return toast('Поставьте пару лайков — рекомендациям нужно от чего оттолкнуться', { icon: 'sparkle' });
     first = shuffle(likes).slice(0, 10);
   }
   const current = wave;
-  await playTracks(first, 0, { kind: 'wave', title: 'Волна' });
+  await playTracks(first, 0, { kind: 'wave', title: 'Поток рекомендаций' });
   wave = current;
+}
+
+/** Wave grown from one track: the track first, then songs related to it with a similar vibe. */
+export async function playTrackWave(seed: Track): Promise<void> {
+  if (!app.online.peek() || seed.source !== 'yt') return toast('Волна по треку работает онлайн и для треков с YouTube', { icon: 'offline' });
+  const current = new Wave(recoSource, 'mix', Math.random, seed);
+  wave = current;
+  const title = `Волна по «${seed.title}»`;
+  if (currentTrack.peek()?.id === seed.id) {
+    // Already playing: keep it going, just replace what comes after it.
+    player.context.value = { kind: 'wave', title };
+    for (let i = player.queue.peek().length - 1; i > player.index.peek(); i--) await call('queueRemove', { index: i });
+  } else {
+    // Start the seed right away; the rest joins the queue once found.
+    await playTracks([seed], 0, { kind: 'wave', title });
+  }
+  wave = current;
+  let more = await current.next(8).catch(() => [] as Track[]);
+  more = await runHooks(hooks.recommendations, more, { source: 'wave' });
+  if (wave !== current) return;
+  if (more.length) await call('queueAdd', { tracks: more });
+  else toast('Похожих треков не нашлось', { icon: 'similar' });
 }
 
 export function isWaveActive(): boolean {

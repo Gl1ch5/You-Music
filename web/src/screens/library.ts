@@ -1,10 +1,10 @@
 import { defineRoute, goBack, navigate } from '../app/router';
 import { call } from '../bridge/bridge';
 import type { Playlist, Track } from '../bridge/contract';
-import { h, icon, replaceChildren, tracksLabel } from '../core/dom';
+import { h, icon, replaceChildren, setIcon, tracksLabel } from '../core/dom';
 import { track, type Scope } from '../core/signal';
 import { app } from '../core/store';
-import { createPlaylist, download } from '../services/library';
+import { createPlaylist, download, notDownloaded } from '../services/library';
 import { playTracks, shuffle } from '../services/playback';
 import { appBar, cover, emptyState, iconButton, playButton, trackRow, watchScroll } from '../ui/components';
 import { pageHero, totalDuration } from '../ui/hero';
@@ -36,9 +36,9 @@ export function listPage(
   const total = opts.tracks.reduce((s, t) => s + t.durationMs, 0);
   const actions = opts.tracks.length
     ? [
-        iconButton('download', 'Скачать всё', () => download(opts.tracks)),
-        playButton(scope, { playing: () => false, onToggle: () => playTracks(opts.tracks, 0, ctx) }),
         iconButton('shuffle', 'Перемешать', () => playTracks(shuffle(opts.tracks), 0, ctx)),
+        playButton(scope, { playing: () => false, onToggle: () => playTracks(opts.tracks, 0, ctx) }),
+        downloadAllButton(scope, opts.tracks),
       ]
     : [];
   screen.append(
@@ -49,17 +49,50 @@ export function listPage(
   return screen;
 }
 
+/** Round button that downloads every track of a list; the ring shows how much is already offline. */
+function downloadAllButton(scope: Scope, tracks: Track[]): HTMLElement {
+  const remote = tracks.filter((t) => t.source === 'yt');
+  const glyph = icon('download');
+  const btn = h('button.btn-icon.dl-all', { attrs: { 'aria-label': 'Скачать всё' }, onclick: () => {
+    const rest = notDownloaded(remote);
+    if (rest.length) download(rest);
+    else toast('Всё уже скачано', { icon: 'downloaded' });
+  } }, glyph);
+  scope.effect(() => {
+    const map = app.downloads.value;
+    const done = remote.filter((t) => map.get(t.id)?.status === 'done').length;
+    const all = remote.length > 0 && done === remote.length;
+    setIcon(glyph, all ? 'downloaded' : 'download');
+    btn.classList.toggle('on', all);
+    btn.style.setProperty('--dl', String(remote.length ? done / remote.length : 0));
+    btn.setAttribute('aria-label', all ? 'Всё скачано' : `Скачать всё (${done} из ${remote.length})`);
+  });
+  return btn;
+}
+
 function heartCover(): HTMLElement {
   const c = h('div.cover', { style: { color: 'var(--like)' } }, icon('heart-fill'));
   c.querySelector('svg')!.style.setProperty('--icon', '72px');
   return c;
 }
 
+/** Replaces the page inside `holder`, keeping the scroll position of the previous one. */
+export function swapPage(holder: HTMLElement, page: HTMLElement): void {
+  const top = holder.querySelector<HTMLElement>('.screen')?.scrollTop ?? 0;
+  replaceChildren(holder, page);
+  if (top) page.scrollTop = top;
+}
+
 defineRoute('likes', ({ scope }) => {
   const holder = h('div.screen', { style: { padding: '0' } });
+  let shown = '';
   scope.effect(() => {
     const tracks = app.likes.value.map((l) => l.track);
-    replaceChildren(
+    // Only a real change of the list re-renders (and even then the scroll stays where it was).
+    const ids = tracks.map((t) => t.id).join('|');
+    if (ids === shown) return;
+    shown = ids;
+    swapPage(
       holder,
       listPage(scope, {
         title: 'Мне нравится',
@@ -142,7 +175,7 @@ defineRoute('playlist', ({ scope, params }) => {
       }));
       return;
     }
-    replaceChildren(
+    swapPage(
       holder,
       listPage(scope, {
         title: playlist.name,

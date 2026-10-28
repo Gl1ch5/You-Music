@@ -9,6 +9,7 @@ import { actionSheet, confirmSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
 import { trackList } from '../ui/trackList';
 import { trackHeader } from '../ui/trackMenu';
+import { offlineButtons } from './collection';
 
 function statusText(d: Download): string {
   if (d.status === 'queued') return 'В очереди';
@@ -76,7 +77,7 @@ defineRoute('downloads', ({ scope }) => {
   });
 
   loadStorage();
-  screen.append(bar, h('div.page-head', null, h('h1.h1', null, 'Скачанное')), storage, pending, h('div.section', null, done));
+  screen.append(bar, h('div.page-head', null, h('h1.h1', null, 'Скачанное')), storage, offlineButtons(), pending, h('div.section', null, done));
   return screen;
 });
 

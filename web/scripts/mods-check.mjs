@@ -27,7 +27,7 @@ await page.route('**/mods/**', async (route) => {
 });
 await page.addInitScript((m) => (window.__mockMods = m), mods);
 await page.goto('http://localhost:4174/index.html');
-await page.waitForSelector('.wave-hero');
+await page.waitForSelector('.stream-row');
 await page.click('.page-head .btn-icon');
 await page.click('.item:has-text("Моды")');
 await page.waitForSelector('.page-head h1:has-text("Моды")');
@@ -43,7 +43,7 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
-await page.click('.wave-hero .play-btn');
+await page.click('.stream-row button');
 await page.waitForTimeout(600);
 await page.click('.mini');
 await page.waitForTimeout(800);

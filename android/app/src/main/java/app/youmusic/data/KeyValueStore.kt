@@ -14,7 +14,16 @@ class KeyValueStore(context: Context) {
 
     fun get(key: String): String? = prefs.getString(key, null)
 
-    fun set(key: String, value: String?) = prefs.edit { if (value == null) remove(key) else putString(key, value) }
+    fun set(key: String, value: String?) {
+        prefs.edit { if (value == null) remove(key) else putString(key, value) }
+        onChanged?.invoke(key)
+    }
+
+    /** Every string entry (for the full backup). */
+    fun all(): Map<String, String> = prefs.all.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }.toMap()
+
+    /** Called after every [set] (the auto backup listens). */
+    var onChanged: ((String) -> Unit)? = null
 
     fun keys(prefix: String): List<String> = prefs.all.keys.filter { it.startsWith(prefix) }
 

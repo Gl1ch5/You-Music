@@ -2,6 +2,7 @@ package app.youmusic.source
 
 import app.youmusic.bridge.BridgeException
 import app.youmusic.bridge.BridgeJson
+import app.youmusic.net.FreeProxies
 import app.youmusic.net.Http
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -17,15 +18,30 @@ import okhttp3.Request
 data class ImportedTrackDto(val title: String, val artist: String, val durationMs: Long = 0)
 
 @Serializable
-data class ImportedListDto(val title: String, val source: String, val tracks: List<ImportedTrackDto>)
+data class ImportedListDto(
+    val title: String,
+    val source: String,
+    val tracks: List<ImportedTrackDto>,
+    /** Set when the list was read through a free public proxy ("1.2.3.4:8080"). */
+    val via: String? = null,
+)
 
 /**
  * Reads track lists from other services by public link, without accounts:
  * Spotify (embed page data) and Yandex Music (public API). Matching to YouTube happens in the UI.
+ * When Yandex refuses the current network (451 outside Russia / behind a VPN, captcha, timeouts), its requests
+ * go through free Russian proxies found and checked on the fly ([FreeProxies]).
  */
 class ImportRepository {
+    /** Proxy that served the last Yandex request of the current import, if any. */
+    private var via: String? = null
 
-    fun fetch(link: String): ImportedListDto {
+    suspend fun fetch(link: String): ImportedListDto {
+        via = null
+        return read(link).let { if (it.source == "yandex") it.copy(via = via) else it }
+    }
+
+    private suspend fun read(link: String): ImportedListDto {
         val url = link.trim()
         SPOTIFY.find(url)?.let { m -> return spotify(m.groupValues[1], m.groupValues[2]) }
         YANDEX_USER_PLAYLIST.find(url)?.let { m -> return yandexPlaylist("users/${m.groupValues[1]}/playlists/${m.groupValues[2]}") }
@@ -55,10 +71,31 @@ class ImportRepository {
         return ImportedListDto(entity.str("name") ?: "Spotify", "spotify", list.ifEmpty { singleTrack })
     }
 
-    private fun yandexApi(path: String): JsonObject {
+    /**
+     * Direct first; on 451, a captcha page instead of JSON or a network failure — through free proxies.
+     * 404/401/403 are real answers about the playlist and are returned as is.
+     */
+    private suspend fun yandexGet(url: String): Pair<Int, String> {
+        val headers = mapOf("X-Yandex-Music-Client" to "YandexMusicAndroid/24023621")
+        val direct = runCatching { get(url, headers) }.getOrNull()
+        if (direct != null && direct.first != 451 && !(direct.first == 200 && !direct.second.trimStart().startsWith("{"))) return direct
+        val request = Request.Builder().url(url).header("User-Agent", Http.DESKTOP_UA).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
+        val proxied = FreeProxies.fetch(request) { code, body ->
+            (code to body).takeIf { code in setOf(200, 401, 403, 404) && body.trimStart().startsWith("{") }
+        }
+        if (proxied != null) {
+            via = FreeProxies.describe(proxied.first)
+            return proxied.second
+        }
+        if (direct != null && direct.first == 451) {
+            throw BridgeException("unavailable", "Яндекс Музыка недоступна из этой сети, и бесплатные прокси сейчас не ответили. Выключите VPN на время переноса или попробуйте ещё раз.")
+        }
+        throw BridgeException("network", "Не удалось связаться с Яндекс Музыкой ни напрямую, ни через бесплатные прокси")
+    }
+
+    private suspend fun yandexApi(path: String): JsonObject {
         val sep = if ('?' in path) '&' else '?'
-        val (code, body) = get("https://api.music.yandex.net/$path${sep}rich-tracks=true", mapOf("X-Yandex-Music-Client" to "YandexMusicAndroid/24023621"))
-        if (code == 451) throw BridgeException("unavailable", "Яндекс Музыка недоступна из этой сети. Если включён VPN — выключите его на время переноса.")
+        val (code, body) = yandexGet("https://api.music.yandex.net/$path${sep}rich-tracks=true")
         if (code == 404) throw BridgeException("not_found", "Плейлист не найден или скрыт. Сделайте его публичным.")
         if (code == 401 || code == 403) throw BridgeException("not_found", "Плейлист закрыт. Откройте доступ по ссылке в Яндекс Музыке.")
         if (code != 200) throw BridgeException("network", "Яндекс Музыка ответила кодом $code")
@@ -66,7 +103,7 @@ class ImportRepository {
             ?: throw BridgeException("extraction", "Неожиданный ответ Яндекс Музыки")
     }
 
-    private fun yandexPlaylist(path: String, fallbackTitle: String = "Яндекс Музыка"): ImportedListDto {
+    private suspend fun yandexPlaylist(path: String, fallbackTitle: String = "Яндекс Музыка"): ImportedListDto {
         val result = yandexApi(path)
         val entries = (result["tracks"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
         val full = entries.mapNotNull { (it["track"] as? JsonObject) }
@@ -77,15 +114,15 @@ class ImportRepository {
         return ImportedListDto(result.str("title") ?: fallbackTitle, "yandex", tracks.mapNotNull(::yandexTrack))
     }
 
-    private fun yandexAlbum(id: String): ImportedListDto {
+    private suspend fun yandexAlbum(id: String): ImportedListDto {
         val result = yandexApi("albums/$id/with-tracks")
         val tracks = (result["volumes"] as? JsonArray).orEmpty().flatMap { (it as? JsonArray).orEmpty() }.mapNotNull { it as? JsonObject }
         return ImportedListDto(result.str("title") ?: "Альбом", "yandex", tracks.mapNotNull(::yandexTrack))
     }
 
     /** Large playlists come back as bare ids; resolve them in batches. */
-    private fun yandexTracks(ids: List<String>): List<JsonObject> = ids.chunked(100).flatMap { batch ->
-        val (code, body) = get("https://api.music.yandex.net/tracks?track-ids=${batch.joinToString(",")}")
+    private suspend fun yandexTracks(ids: List<String>): List<JsonObject> = ids.chunked(100).flatMap { batch ->
+        val (code, body) = yandexGet("https://api.music.yandex.net/tracks?track-ids=${batch.joinToString(",")}")
         if (code != 200) return@flatMap emptyList()
         (BridgeJson.parseToJsonElement(body).jsonObject["result"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
     }

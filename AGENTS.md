@@ -17,10 +17,13 @@ android/                 Kotlin, AGP 9 (встроенный Kotlin), Gradle wra
     bridge/              BridgeHost (WebMessageListener), CommandRegistry, EventBus, modules/* — команды по доменам
     player/              PlaybackService (Media3), PlayerController (MediaController), PlaybackDataSource (скачанное → кэш → YouTube),
                          ChunkedDataSource (поток короткими range-запросами + перезапрос URL на 403), StreamPrefetcher, FadeController (плавные переходы), PlaybackHistoryTracker
-    source/              YouTubeRepository, StreamResolver, ImportRepository (Spotify/Яндекс), LyricsRepository (LRCLIB), Errors (коды ошибок)
-    data/                Room (Entities, Daos, AppDatabase), LibraryRepository, KeyValueStore (настройки/темы/моды UI), AppPaths
+    source/              YouTubeRepository, StreamResolver, ImportRepository (Spotify/Яндекс), LyricsRepository (LRCLIB),
+                         FeaturesRepository (Deezer: BPM/громкость/жанры для рекомендаций, кэш features.json), Errors (коды ошибок)
+    data/                Room (Entities, Daos, AppDatabase), LibraryRepository, KeyValueStore (настройки/темы/моды UI), AppPaths,
+                         BackupManager (полная копия: библиотека + история + kv без ключа AI; автокопия в папку SAF)
     download/            DownloadRepository + DownloadWorker (WorkManager)
-    net/                 Http (общий OkHttp, пересоздаётся при смене прокси), NetworkMonitor (online/VPN), ProxyManager
+    net/                 Http (общий OkHttp, пересоздаётся при смене прокси), NetworkMonitor (online/VPN), ProxyManager,
+                         FreeProxies (бесплатные прокси РФ только для переноса из Яндекса; Call.await())
     update/              UpdateManager (version.json из GitHub Releases, PackageInstaller), UpdateWorker (фон, 15 мин)
     ai/                  AiClient — OpenAI-совместимый chat/completions; ключ хранится только нативно
     local/, mods/, art/, system/
@@ -30,8 +33,9 @@ web/                     TypeScript + Vite, без фреймворков
   src/core/              signal.ts (реактивность), dom.ts (h(), иконки, форматтеры), store.ts (глобальное состояние), bus.ts
   src/design/            tokens.css, base.css, components.css, icons.ts (SVG-спрайт), noise.png
   src/theme/             темы (builtin.ts, engine.ts, types.ts)
-  src/logic/             чистая логика с тестами: normalize, rank, recommend (волна), match (перенос), ai (промпт и разбор ответа)
-  src/services/          catalog (+findTrack), library, playback (+волна, createWave), ai, updates (OTA, проверка раз в минуту), deeplink (youmusic://), settings, art, events (uiBus для модов)
+  src/logic/             чистая логика с тестами: normalize, rank, recommend (волна), features (вайб трека), match (перенос), ai (промпт и разбор ответа)
+  src/services/          catalog (+findTrack), library (+скачать лайки/избранное), playback (+волна, createWave, playTrackWave), features (вайбы через trackFeatures),
+                         backup (экспорт/импорт всего, автокопия, предложение восстановить), ai, updates (OTA, проверка раз в минуту), deeplink (youmusic://), settings, art, events (uiBus для модов)
   src/ui/                компоненты, шторки, виртуальный список, меню трека, hero
   src/screens/           экраны; каждый регистрируется через defineRoute() и импортируется в main.ts
   src/player/            mini.ts, full.ts
@@ -76,7 +80,9 @@ cd ../android
 11. Тексты интерфейса — на русском.
 12. **OTA.** `versionCode` в CI — минуты с эпохи (растёт между воркфлоу). Каждый релиз обязан содержать `version.json` (`versionCode, versionName, channel, apk, notes`). Не меняйте ключ подписи nightly — иначе обновление не встанет поверх.
 13. **Сеть.** Все HTTP-запросы — через `Http.client` / `Http.callFactory`, тогда работают прокси. При смене маршрута (VPN, прокси, сеть) URL потоков сбрасываются: они привязаны к IP.
-14. **Глубокие ссылки** `youmusic://socks|http|proxy|ai|updates` — обработка в `services/deeplink.ts`, новые типы описывать в README.
+14. **Данные пользователя не должны теряться.** Новое долговременное состояние кладите в БД или kv — тогда оно попадёт в полную копию (`BackupManager`) и системный бэкап (`res/xml/*backup*`). Ключи `backup.*` в kv в копию не входят; секреты (ключ AI) из копии вырезаются.
+15. **Данные треков (Deezer)** — только для рекомендаций, в плеере их не показываем.
+16. **Глубокие ссылки** `youmusic://socks|http|proxy|ai|updates` — обработка в `services/deeplink.ts`, новые типы описывать в README.
 
 ## Как добавить…
 
@@ -92,3 +98,4 @@ cd ../android
 | 2026-10-28 | Первая версия: все 7 этапов (каркас, Graphite, плеер/библиотека, темы, офлайн, моды, рекомендации), CI с nightly-релизом. |
 | 2026-10-28 | Прокси (SOCKS5/HTTP, пинг, отключение при VPN), OTA-обновления (version.json, проверка раз в минуту, автоскачивание, PackageInstaller), нейро-рекомендации (OpenAI-совместимый API, режим волны «Нейро»), плавные переходы, поток кусками с переподключением и полным буфером, автоскачивание лайкнутых, кэш 2 ГБ, поиск: треки → плейлисты/альбомы → ещё треки, новая панель действий плеера, ссылки youmusic://. |
 | 2026-10-28 | Мгновенная пауза (`playWhenReady` → `player.wantsPlay`), кольцо загрузки на кнопке play, исправлен лайк, быстрее анимации (90/160/240 мс), старт после 0.7 с буфера, предзагрузка следующего трека, прогрев плеерного JS YouTube. Перенос из Spotify/Яндекс Музыки/списка/CSV (`importFetch`, `logic/match.ts`, экран `import`). Добавлены AGENTS.md и CLAUDE.md. |
+| 2026-10-28 | Главная — «Для вас» с фильтром режима вместо hero «Волны»; «Волна по треку» с учётом вайба (Deezer: темп/громкость/жанры → `logic/features.ts`, команда `trackFeatures`); перенос из Яндекса через бесплатные прокси (`net/FreeProxies`); кнопки «Скачать лайки/избранное»; исправлены клик сквозь мини-плеер и прыжок прокрутки в «Мне нравится»; полный бэкап (`backup*`, автокопия в папку, предложение восстановить, `allowBackup` с правилами), проверка подписи OTA-APK (`signatureMismatch`), ключ nightly сохраняется в кэш сразу после создания. |

@@ -1,4 +1,5 @@
 import type { HistoryEntry, Like, Track } from '../bridge/contract';
+import { averageVibe, vibeBonus, type Vibe } from './features';
 import { artistKey, songKey } from './normalize';
 
 /**
@@ -6,6 +7,8 @@ import { artistKey, songKey } from './normalize';
  * Candidates: related videos of liked and recently finished tracks.
  * Score: how many seeds point at a track (liked seeds count more) + how much the user plays its artist − skips.
  * Filters: nothing already liked or recently played, one version per song per session, ≤2 same artist in a row.
+ * Vibe: when the source knows audio data (tempo, loudness, genres), the best candidates are nudged towards the
+ * average vibe of the user's likes — or of the seed track for a wave "по треку".
  */
 
 export interface RecoSignals {
@@ -19,7 +22,14 @@ export interface RecoSource {
   related(track: Track): Promise<Track[]>;
   /** Optional extra candidates (e.g. AI suggestions); they count as strongly linked to the user's taste. */
   extra?(alreadyDelivered: Track[]): Promise<Track[]>;
+  /** Optional audio "vibe" per track id (missing = unknown). */
+  vibes?(tracks: Track[]): Promise<Map<string, Vibe | null>>;
 }
+
+/** How many top candidates get their vibe looked up per step, and how much it can move a score. */
+const VIBE_TOP = 30;
+const VIBE_WEIGHT_TASTE = 0.9;
+const VIBE_WEIGHT_SEED = 1.8;
 
 export type WaveMode = 'mix' | 'familiar' | 'discover';
 
@@ -211,11 +221,15 @@ export class Wave {
   private expanded = new Set<string>();
   private candidates: Candidate[] = [];
   private delivered: Track[] = [];
+  private target: Vibe | null = null;
+  private vibes = new Map<string, Vibe | null>();
 
+  /** With `seed`, the wave grows only from that track (and what it plays), matching its vibe: "волна по треку". */
   constructor(
     private source: RecoSource,
     private mode: WaveMode = 'mix',
     private rng: () => number = Math.random,
+    private seed: Track | null = null,
   ) {}
 
   setMode(mode: WaveMode): void {
@@ -229,7 +243,8 @@ export class Wave {
       const available = selectTracksPreview(scoreCandidates(this.candidates, profile, this.mode), profile, this.session);
       if (available >= count || !(await this.expand(3))) break;
     }
-    const picked = selectTracks(scoreCandidates(this.candidates, profile, this.mode), profile, this.session, count);
+    const scored = await this.withVibe(scoreCandidates(this.candidates, profile, this.mode));
+    const picked = selectTracks(scored, profile, this.session, count);
     const arranged = limitArtistRuns(picked, 2, this.delivered);
     this.delivered.push(...arranged);
     return arranged;
@@ -255,7 +270,35 @@ export class Wave {
     if (this.profile) return;
     this.signalsCache = await this.source.signals();
     this.profile = buildProfile(this.signalsCache);
-    this.seedQueue = pickSeeds(this.signalsCache, 12, this.rng);
+    if (this.seed) {
+      this.seedQueue = [{ track: this.seed, liked: true }];
+      this.session.seenIds.add(this.seed.id);
+      this.session.seenKeys.add(songKey(this.seed));
+    } else {
+      this.seedQueue = pickSeeds(this.signalsCache, 12, this.rng);
+    }
+    await this.loadTarget().catch(() => undefined);
+  }
+
+  /** Target vibe: the seed track's, or the average of the freshest likes. */
+  private async loadTarget(): Promise<void> {
+    if (!this.source.vibes) return;
+    const tracks = this.seed ? [this.seed] : [...this.signalsCache!.likes].sort((a, b) => b.likedAt - a.likedAt).slice(0, 30).map((l) => l.track);
+    const map = await this.source.vibes(tracks);
+    this.target = averageVibe(tracks.map((t) => map.get(t.id) ?? null), this.seed ? 1 : 3);
+  }
+
+  /** Looks up the vibe of the top candidates (cached per wave) and adjusts their scores. */
+  private async withVibe(scored: Scored[]): Promise<Scored[]> {
+    if (!this.target || !this.source.vibes) return scored;
+    const top = [...scored].sort((a, b) => b.score - a.score).slice(0, VIBE_TOP).map((s) => s.track);
+    const unknown = top.filter((t) => !this.vibes.has(t.id));
+    if (unknown.length) {
+      const map = await this.source.vibes(unknown).catch(() => new Map<string, Vibe | null>());
+      unknown.forEach((t) => this.vibes.set(t.id, map.get(t.id) ?? null));
+    }
+    const weight = this.seed ? VIBE_WEIGHT_SEED : VIBE_WEIGHT_TASTE;
+    return scored.map((s) => ({ ...s, score: s.score + vibeBonus(this.vibes.get(s.track.id), this.target, weight) }));
   }
 
   private async expand(n: number): Promise<boolean> {

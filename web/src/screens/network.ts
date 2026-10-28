@@ -4,6 +4,7 @@ import type { Proxy, ProxyState, UpdateState } from '../bridge/contract';
 import { h, icon, replaceChildren } from '../core/dom';
 import { app } from '../core/store';
 import { refreshAiConfig } from '../services/ai';
+import { exportAll } from '../services/backup';
 import { saveSettings } from '../services/settings';
 import { checkUpdates } from '../services/updates';
 import { appBar, button, chip, emptyState, iconButton, listItem, switchControl, watchScroll } from '../ui/components';
@@ -138,6 +139,15 @@ defineRoute('updates', ({ scope }) => {
       h('div', null, h('div.small.muted', null, 'Установлено'), h('div.h2.num', null, u?.currentVersion ?? app.version.value.app)),
       latest ? h('div', null, h('div.small.muted', null, `Последняя (${latest.channel})`), h('div.h2.num', null, latest.versionName)) : null,
       h('div.muted', null, u ? `${STATUS_TEXT[u.status]}${u.error ? `: ${u.error}` : ''}` : STATUS_TEXT.idle),
+      u?.signatureMismatch
+        ? h(
+            'div.banner',
+            null,
+            icon('alert'),
+            h('div', null, 'Эта сборка подписана другим ключом и не встанет поверх. Сначала сделайте копию, затем удалите приложение, установите APK и восстановите данные.'),
+          )
+        : null,
+      u?.signatureMismatch ? button('Экспорт всего', () => exportAll(), { cls: 'block', icon: 'export' }) : null,
       u?.status === 'downloading' ? h('div.meter', null, h('i', { style: { width: `${Math.round(u.progress * 100)}%` } })) : null,
       latest?.notes && u?.status !== 'uptodate' ? h('div.small', { style: { whiteSpace: 'pre-wrap' } }, latest.notes) : null,
       u?.status === 'ready'

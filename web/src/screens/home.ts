@@ -10,14 +10,18 @@ import { related } from '../services/catalog';
 import { aiSuggest, type AiPick } from '../services/ai';
 import { isWaveActive, playTracks, playWave, recoSource, togglePlay } from '../services/playback';
 import { saveSettings } from '../services/settings';
-import { chip, emptyState, iconButton, likeButton, playButton, sectionHead, skeletonCards, skeletonRows, trackCover } from '../ui/components';
+import { button, emptyState, iconButton, playButton, sectionHead, skeletonCards, skeletonRows, trackCover } from '../ui/components';
+import { actionSheet } from '../ui/sheet';
 import { trackList } from '../ui/trackList';
 
-const MODES: [Settings['waveMode'], string][] = [
-  ['mix', 'Микс'],
-  ['familiar', 'Любимое'],
-  ['discover', 'Открытия'],
+const MODES: [Settings['waveMode'], string, string][] = [
+  ['mix', 'Микс', 'Любимое вперемешку с новым'],
+  ['familiar', 'Любимое', 'Ближе к тому, что вы уже слушаете'],
+  ['discover', 'Открытия', 'Больше новых исполнителей'],
+  ['neuro', 'Нейро', 'Подбирает нейросеть'],
 ];
+
+const modeLabel = (mode: Settings['waveMode']) => MODES.find(([id]) => id === mode)?.[1] ?? 'Микс';
 
 let recoCache: Track[] | null = null;
 
@@ -25,67 +29,86 @@ export function trackCard(track: Track, onClick: () => void): HTMLElement {
   return h('div.card', { onclick: onClick, dataset: { trackId: track.id } }, trackCover(track, 'md'), h('div.card-title.ellipsis', null, track.title), h('div.card-sub.ellipsis', null, track.artist));
 }
 
-function waveHero(scope: Scope): HTMLElement {
-  const rings = h('div.wave-rings', null, h('i'), h('i'), h('i'));
+/** Small "filter" pill: shows the current mode, opens the list of modes. */
+function modeFilter(scope: Scope): HTMLElement {
+  const label = h('span');
+  const btn = h('button.filter-pill', { attrs: { 'aria-label': 'Режим рекомендаций' }, onclick: () => {
+    const current = app.settings.peek().waveMode;
+    const modes = app.aiEnabled.peek() ? MODES : MODES.filter(([id]) => id !== 'neuro');
+    actionSheet(
+      h('div.h2', null, 'Рекомендации'),
+      modes.map(([id, title, sub]) => ({
+        icon: id === current ? 'check' : id === 'neuro' ? 'sparkle' : 'wave',
+        label: title,
+        sub,
+        run: () => {
+          if (id === app.settings.peek().waveMode) return;
+          recoCache = null;
+          saveSettings({ waveMode: id });
+        },
+      })),
+    );
+  } }, icon('filter', 'sm'), label);
+  scope.effect(() => (label.textContent = modeLabel(app.settings.value.waveMode)));
+  return btn;
+}
+
+/** Compact endless-stream row: play / pause the stream of the selected mode. */
+function streamRow(scope: Scope): HTMLElement {
+  const inStream = () => player.context.value?.kind === 'wave';
   const btn = playButton(scope, {
-    size: 'lg',
+    size: 'sm',
     playing: () => {
-      const inWave = player.context.value?.kind === 'wave';
-      return player.wantsPlay.value && inWave;
+      const on = inStream();
+      return player.wantsPlay.value && on;
     },
     loading: () => {
-      const inWave = player.context.value?.kind === 'wave';
-      return player.buffering.value && player.wantsPlay.value && inWave;
+      const on = inStream();
+      return player.buffering.value && player.wantsPlay.value && on;
     },
     onToggle: () => (isWaveActive() ? togglePlay() : playWave()),
   });
-  const pill = h('div.now-pill');
-  const modes = h('div.chips', { style: { justifyContent: 'center', flexWrap: 'wrap', padding: '0' } });
-
+  const sub = h('div.row-sub.ellipsis');
   scope.effect(() => {
-    const inWave = player.context.value?.kind === 'wave';
-    rings.classList.toggle('paused', !(player.playing.value && inWave));
     const t = currentTrack.value;
-    pill.hidden = !(t && inWave);
-    if (t && inWave) replaceChildren(pill, h('span.ellipsis', null, `${t.artist} — ${t.title}`), likeButton(scope, () => currentTrack.value));
+    sub.textContent = t && inStream() ? `${t.artist} — ${t.title}` : `${modeLabel(app.settings.value.waveMode)} · бесконечно, под ваш вкус`;
   });
-  scope.effect(() => {
-    const mode = app.settings.value.waveMode;
-    const available = app.aiEnabled.value ? [...MODES, ['neuro', 'Нейро'] as [Settings['waveMode'], string]] : MODES;
-    replaceChildren(
-      modes,
-      available.map(([id, label]) =>
-        chip(label, id === mode, () => {
-          saveSettings({ waveMode: id });
-          recoCache = null;
-        }),
-      ),
-    );
-  });
-
-  return h('div.wave-hero', null, rings, h('div.wave-title', null, 'Волна'), h('div.muted.small', null, 'Бесконечный поток под ваш вкус'), btn, pill, modes);
+  return h('div.stream-row', { onclick: (e: MouseEvent) => !(e.target as HTMLElement).closest('button') && btn.click() }, btn, h('div.row-main', null, h('div.row-title', null, 'Слушать поток'), sub));
 }
 
 async function loadRecommendations(): Promise<Track[]> {
   if (recoCache) return recoCache;
   const mode = app.settings.peek().waveMode;
   const wave = new Wave(recoSource, mode === 'neuro' ? 'mix' : mode);
-  const tracks = await runHooks(hooks.recommendations, await wave.next(16), { source: 'home' });
+  const tracks = await runHooks(hooks.recommendations, await wave.next(12), { source: 'home' });
   recoCache = tracks;
   return tracks;
 }
 
+function skeletonGrid(n: number): HTMLElement {
+  return h('div.card-grid', null, Array.from({ length: n }, () => h('div.card', null, h('div.skeleton.square'), h('div.skeleton.line', { style: { width: '80%' } }))));
+}
+
+/** Main content of the home screen: a grid of recommendations for the selected mode. */
 function recommendationsSection(scope: Scope): HTMLElement {
-  const body = h('div', null, skeletonCards(4));
+  const body = h('div', null, skeletonGrid(4));
   const reload = () => {
-    replaceChildren(body, skeletonCards(4));
+    replaceChildren(body, skeletonGrid(4));
     loadRecommendations()
       .then((tracks) => {
         if (!tracks.length) {
           replaceChildren(body, h('div.pad.muted.small', null, 'Лайкните несколько треков — и здесь появятся рекомендации.'));
           return;
         }
-        replaceChildren(body, h('div.scroll-x', null, tracks.map((t, i) => trackCard(t, () => playTracks(tracks, i, { kind: 'list', title: 'Рекомендации' })))));
+        const ctx = { kind: 'list' as const, title: 'Рекомендации' };
+        replaceChildren(
+          body,
+          h('div.card-grid', null, tracks.map((t, i) => trackCard(t, () => playTracks(tracks, i, ctx)))),
+          h('div.pad', { style: { marginTop: 'var(--s-3)' } }, button('Обновить подборку', () => {
+            recoCache = null;
+            reload();
+          }, { cls: 'ghost block', icon: 'sparkle' })),
+        );
       })
       .catch(() => replaceChildren(body, h('div.pad.muted.small', null, 'Не удалось загрузить рекомендации.')));
   };
@@ -93,11 +116,8 @@ function recommendationsSection(scope: Scope): HTMLElement {
     track(app.settings);
     if (app.online.value) reload();
   });
-  const head = h('div.section-head', null, h('h2.h2', { style: { flex: '1' } }, 'Рекомендации'), iconButton('sparkle', 'Обновить', () => {
-    recoCache = null;
-    reload();
-  }));
-  return h('section.section', null, head, body);
+  const head = h('div.section-head', null, h('h2.h2', { style: { flex: '1' } }, 'Для вас'), modeFilter(scope));
+  return h('section.section.first', null, head, streamRow(scope), body);
 }
 
 let aiCache: AiPick[] | null = null;
@@ -202,10 +222,9 @@ defineRoute('home', ({ scope }) => {
     h('div', { style: { height: 'var(--safe-top)' } }),
     h('div.page-head', null, h('h1.h1', null, 'Главная'), iconButton('settings', 'Настройки', () => navigate('settings'))),
     banner,
-    waveHero(scope),
     offlineSection(scope, screen),
-    neuroSection(scope),
     recommendationsSection(scope),
+    neuroSection(scope),
     similarSection(scope, screen),
     recentSection(scope),
   );

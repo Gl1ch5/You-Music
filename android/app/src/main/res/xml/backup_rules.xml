@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 6–11 auto backup: library database and settings only, never caches or downloaded audio. -->
+<full-backup-content>
+    <include domain="database" path="." />
+    <include domain="sharedpref" path="kv.xml" />
+    <include domain="file" path="features.json" />
+</full-backup-content>

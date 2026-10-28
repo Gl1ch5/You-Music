@@ -59,7 +59,8 @@
 | `trackDetails` | `{id}` | `{track, related}` |
 | `getCollection` / `getArtist` | `{url}` | `CollectionPage` / `ArtistPage` |
 | `lyrics` | `{artist, title, durationMs}` | `{plain?, synced?}` (LRCLIB) |
-| `importFetch` | `{url}` | `{title, source, tracks: {title, artist, durationMs}[]}` — список из Spotify / Яндекс Музыки по публичной ссылке |
+| `importFetch` | `{url}` | `{title, source, tracks: {title, artist, durationMs}[], via?}` — список из Spotify / Яндекс Музыки по публичной ссылке. Если Яндекс не пускает текущую сеть (451, капча, таймаут), запросы идут через бесплатные российские прокси (`net/FreeProxies.kt`); `via` — какой прокси сработал |
+| `trackFeatures` | `{tracks: {id, artist, title, durationMs}[]}` | `{[id]: {found, bpm?, gainDb?, genres, explicit, year?}}` — темп, громкость, жанры из публичного API Deezer; кэш на диске (`features.json`), до 40 новых треков за вызов. Только для рекомендаций |
 | `artworkPalette` | `{url}` | `{blurUrl, color}` — размытая обесцвеченная обложка + приглушённый тон |
 | **Библиотека** | | |
 | `getLibrary` | — | `{likes, playlists, downloads, local}` |
@@ -67,7 +68,13 @@
 | `playlistCreate` / `playlistRename` / `playlistDelete` / `playlistGet` | … | `Playlist` / — / — / `PlaylistPage` |
 | `playlistAdd` / `playlistRemove` / `playlistMove` | `{id, tracks}` / `{id, index}` / `{id, from, to}` | — |
 | `history`, `historyClear` | `{limit}` / — | `HistoryEntry[]` (с `listenedMs`, `completed`, `skipped`) |
-| `libraryExport`, `libraryImport` | — / `{json}` | JSON / число треков |
+| `libraryExport`, `libraryImport` | — / `{json}` | JSON / число треков (импорт: плейлист с тем же именем заменяется, а не дублируется) |
+| `backupExport` | — | JSON полной копии (`you-music-library` v2: + `history`, `settings` — все kv, ключ нейросети вырезан) |
+| `backupImport` | `{json}` | число треков; принимает и старый экспорт v1; восстанавливает kv, перечитывает прокси, ключ нейросети на устройстве сохраняется |
+| `backupStatus` | — | `BackupStatus {folder?, savedAt, error?}` |
+| `backupSetFolder` | `{enabled}` | `BackupFolder {status, existing?}` или `null` (выбор отменён); `existing` — в папке уже лежит копия |
+| `backupRestoreFolder` | — | число треков (из `you-music-backup.json` в папке автокопии) |
+| `backupNow` | — | `true`, если копия записана (пустая библиотека не затирает существующую копию) |
 | **Офлайн** | | |
 | `download` | `{tracks, quality?}` | — (очередь WorkManager) |
 | `downloadRemove` | `{id}` | — |
@@ -82,7 +89,7 @@
 | `proxyPing` | `{id}` | мс до YouTube через прокси, `-1` — не отвечает |
 | **Обновления (OTA)** | | |
 | `updateState` / `updateCheck` / `updateDownload` | — | `UpdateState` |
-| `updateInstall` | — | — (PackageInstaller, система может попросить подтверждение) |
+| `updateInstall` | — | — (сначала обновляет автокопию; ошибка `signature`, если APK подписан другим ключом; PackageInstaller, система может попросить подтверждение) |
 | `updateSchedule` | `{enabled}` | — (фоновая проверка WorkManager, раз в 15 мин) |
 | **Нейросеть** | | |
 | `aiConfig` | — | `{baseUrl, model, enabled, hasKey}` (ключ наружу не отдаётся) |
@@ -108,7 +115,8 @@
 | `network` | `{online, unmetered, vpn}` |
 | `insets` | `{top, bottom, left, right}` в dp |
 | `proxyChanged` | `ProxyState` |
-| `updateState` | `UpdateState` (прогресс скачивания, готовность) |
+| `updateState` | `UpdateState` (прогресс скачивания, готовность, `signatureMismatch`) |
+| `backupState` | `BackupStatus` (после каждой записи автокопии) |
 | `deepLink` | `{url}` — открыта ссылка `youmusic://…` |
 | `back` | — (системная кнопка «Назад») |
 

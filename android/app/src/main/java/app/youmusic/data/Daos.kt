@@ -122,6 +122,15 @@ interface HistoryDao {
 
     @Query("DELETE FROM history")
     suspend fun clear()
+
+    @Query("SELECT * FROM history ORDER BY playedAt DESC LIMIT :limit")
+    suspend fun entries(limit: Int): List<HistoryEntity>
+
+    @Query("SELECT trackId || ':' || playedAt FROM history")
+    suspend fun keys(): List<String>
+
+    @Insert
+    suspend fun insertAll(entries: List<HistoryEntity>)
 }
 
 @Dao

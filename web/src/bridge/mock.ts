@@ -224,6 +224,10 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     source: 'spotify',
     tracks: tracks.slice(8, 14).map((t) => ({ title: t.title, artist: t.artist, durationMs: t.durationMs })),
   }),
+  trackFeatures: ({ tracks: list }) =>
+    Object.fromEntries(
+      list.map((t, i) => [t.id, { found: true, bpm: 80 + ((t.title.length * 13 + i * 7) % 90), gainDb: -4 - ((t.artist.length * 3) % 10), genres: [['Pop', 'Rap/Hip Hop', 'Rock', 'Electro', 'Metal'][t.title.length % 5]], explicit: t.title.length % 3 === 0 }]),
+    ),
   artworkPalette: ({ url }) => {
     const i = tracks.findIndex((t) => t.artwork === url);
     return { blurUrl: url, color: PALETTES[(i + 1) % PALETTES.length][0] };
@@ -256,6 +260,12 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
   historyClear: () => void history.splice(0),
   libraryExport: () => JSON.stringify({ format: 'you-music-library', likes }),
   libraryImport: () => 0,
+  backupExport: () => JSON.stringify({ format: 'you-music-library', version: 2, likes }),
+  backupImport: () => 0,
+  backupStatus: () => ({ folder: null, savedAt: 0 }),
+  backupSetFolder: ({ enabled }) => ({ status: { folder: enabled ? 'Documents' : null, savedAt: enabled ? Date.now() : 0 } }),
+  backupRestoreFolder: () => 0,
+  backupNow: () => true,
 
   download: ({ tracks: t }) => {
     for (const track of t) {

@@ -6,7 +6,8 @@ import { artistKey } from '../logic/normalize';
 import { slots } from '../mods/registry';
 import { artFor } from '../services/art';
 import { playTracks } from '../services/playback';
-import { cover, iconButton, sectionHead, trackRow } from '../ui/components';
+import { downloadFavorites, downloadLikes } from '../services/library';
+import { button, cover, iconButton, sectionHead, trackRow } from '../ui/components';
 import { openTrackMenu } from '../ui/trackMenu';
 
 function tile(iconName: string, title: string, sub: string, onclick: () => void): HTMLElement {
@@ -87,12 +88,23 @@ defineRoute('collection', ({ scope }) => {
     h('div', { style: { height: 'var(--safe-top)' } }),
     h('div.page-head', null, h('h1.h1', null, 'Коллекция'), iconButton('settings', 'Настройки', () => navigate('settings'))),
     likesBlock,
+    offlineButtons(),
     h('div.section', null, tiles),
     artists,
     modTabs,
   );
   return screen;
 });
+
+/** "Download likes" / "Download favourites (likes + playlists)". */
+export function offlineButtons(): HTMLElement {
+  return h(
+    'div.button-row',
+    null,
+    button('Скачать лайки', () => void downloadLikes(), { icon: 'download' }),
+    button('Скачать избранное', () => void downloadFavorites(), { icon: 'download' }),
+  );
+}
 
 export function sized(el: HTMLElement, size: string): HTMLElement {
   el.style.width = el.style.height = size;
