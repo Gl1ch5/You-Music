@@ -1,0 +1,4 @@
+/* CSS override example: mods can restyle anything through the design tokens. */
+.row-sub .icon {
+  color: var(--accent);
+}

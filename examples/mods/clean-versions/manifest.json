@@ -1,0 +1,10 @@
+{
+  "id": "clean-versions",
+  "name": "Только оригиналы",
+  "version": "1.0.0",
+  "author": "You Music",
+  "description": "Убирает sped up, slowed, nightcore и 8D из поиска и волны (если вы их не ищете) и добавляет в меню трека «Играть оригинал».",
+  "permissions": ["hooks.search", "hooks.recommendations", "search", "player.control"],
+  "entry": "main.js",
+  "styles": ["style.css"]
+}

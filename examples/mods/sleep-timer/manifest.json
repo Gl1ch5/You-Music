@@ -1,0 +1,9 @@
+{
+  "id": "sleep-timer",
+  "name": "Таймер сна",
+  "version": "1.0.0",
+  "author": "You Music",
+  "description": "Кнопка с луной в плеере: пауза через 15–90 минут или после текущего трека.",
+  "permissions": ["player.control"],
+  "entry": "main.js"
+}

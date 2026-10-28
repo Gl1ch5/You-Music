@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web UI
+        working-directory: web
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test
+          npx vite build
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Signed release APK
+        working-directory: android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Set KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD secrets (see README)."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          export KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          VERSION="${GITHUB_REF_NAME#v}"
+          ./gradlew :app:assembleRelease -PversionCode=${{ github.run_number }} -PversionName="$VERSION"
+          mkdir -p ../dist && cp app/build/outputs/apk/release/app-release.apk "../dist/you-music-$VERSION.apk"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd examples/mods && for d in */; do (cd "$d" && zip -qr "../../../dist/mod-${d%/}.zip" .); done)
+          gh release create "$GITHUB_REF_NAME" dist/* --title "You Music $GITHUB_REF_NAME" --generate-notes

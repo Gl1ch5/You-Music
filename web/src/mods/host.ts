@@ -114,7 +114,16 @@ export function disableMod(id: string, error?: unknown): void {
 export async function setModEnabled(id: string, enabled: boolean): Promise<void> {
   const entry = mods.peek().find((m) => m.mod.id === id);
   if (!entry) return;
-  states[id] = { ...entry.state, enabled };
+  const requested = entry.mod.manifest.permissions ?? [];
+  let granted = entry.state.granted;
+  if (enabled && requested.some((p) => !granted.includes(p))) {
+    if (!(await confirmPermissions(entry.mod.manifest, 'Включить'))) {
+      setEntry(id, { state: { ...entry.state } });
+      return;
+    }
+    granted = requested;
+  }
+  states[id] = { granted, enabled };
   setEntry(id, { state: states[id], error: undefined });
   await saveStates();
   if (enabled) await startMod(entry.mod);
@@ -148,33 +157,43 @@ export async function installModFlow(kind: 'zip' | 'folder'): Promise<void> {
   const m = staged.manifest;
   const problem = validate(m);
   if (problem) return toast(problem, { icon: 'alert' });
-  const perms = m.permissions ?? [];
   const existing = mods.peek().some((e) => e.mod.id === m.id);
-  openSheet({
-    header: h('div', null, h('div.h2', null, m.name), h('div.small.muted', null, `${m.version}${m.author ? ' · ' + m.author : ''}`)),
-    content: (close) =>
-      h(
-        'div.pad.stack',
-        { style: { gap: 'var(--s-3)', paddingTop: 'var(--s-2)' } },
-        m.description ? h('div', null, m.description) : null,
-        h('div.small.muted', null, 'Мод сможет добавлять кнопки, вкладки и стили. Дополнительно он запрашивает:'),
-        perms.length ? h('ul', { style: { margin: '0', paddingLeft: 'var(--s-4)' } }, perms.map((p) => h('li', null, PERMISSIONS[p]))) : h('div', null, 'Ничего — только интерфейс.'),
-        h('div.small.faint', null, 'Устанавливайте моды только из источников, которым доверяете: мод выполняется внутри приложения.'),
-        button(existing ? 'Обновить и включить' : 'Установить и включить', async () => {
-          close();
-          try {
-            if (existing) stopMod(m.id);
-            const installed = await call('modInstall', { stageId: staged.stageId });
-            states[installed.id] = { enabled: true, granted: perms };
-            await saveStates();
-            mods.value = [...mods.peek().filter((e) => e.mod.id !== installed.id), { mod: installed, state: states[installed.id], running: false }];
-            await startMod(installed);
-            toast(`Мод «${m.name}» установлен`, { icon: 'check' });
-          } catch (e) {
-            toast((e as Error).message, { icon: 'alert' });
-          }
-        }, { cls: 'primary block' }),
-        button('Отмена', close, { cls: 'ghost block' }),
-      ),
+  if (!(await confirmPermissions(m, existing ? 'Обновить и включить' : 'Установить и включить'))) return;
+  try {
+    if (existing) stopMod(m.id);
+    const installed = await call('modInstall', { stageId: staged.stageId });
+    states[installed.id] = { enabled: true, granted: m.permissions ?? [] };
+    await saveStates();
+    mods.value = [...mods.peek().filter((e) => e.mod.id !== installed.id), { mod: installed, state: states[installed.id], running: false }];
+    await startMod(installed);
+    toast(`Мод «${m.name}» установлен`, { icon: 'check' });
+  } catch (e) {
+    toast((e as Error).message, { icon: 'alert' });
+  }
+}
+
+/** Shows what a mod asks for; resolves true when the user agrees. */
+function confirmPermissions(m: ModManifest, ok: string): Promise<boolean> {
+  const perms = m.permissions ?? [];
+  return new Promise((resolve) => {
+    let result = false;
+    openSheet({
+      header: h('div', null, h('div.h2', null, m.name), h('div.small.muted', null, `${m.version}${m.author ? ' · ' + m.author : ''}`)),
+      onClose: () => resolve(result),
+      content: (close) =>
+        h(
+          'div.pad.stack',
+          { style: { gap: 'var(--s-3)', paddingTop: 'var(--s-2)' } },
+          m.description ? h('div', null, m.description) : null,
+          h('div.small.muted', null, 'Мод сможет добавлять кнопки, вкладки и стили. Дополнительно он запрашивает:'),
+          perms.length ? h('ul', { style: { margin: '0', paddingLeft: 'var(--s-4)' } }, perms.map((p) => h('li', null, PERMISSIONS[p] ?? p))) : h('div', null, 'Ничего — только интерфейс.'),
+          h('div.small.faint', null, 'Устанавливайте моды только из источников, которым доверяете: мод выполняется внутри приложения.'),
+          button(ok, () => {
+            result = true;
+            close();
+          }, { cls: 'primary block' }),
+          button('Отмена', close, { cls: 'ghost block' }),
+        ),
+    });
   });
 }

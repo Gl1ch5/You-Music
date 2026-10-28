@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web UI — install
+        working-directory: web
+        run: npm ci
+
+      - name: Web UI — lint
+        working-directory: web
+        run: npm run lint
+
+      - name: Web UI — typecheck
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Web UI — tests
+        working-directory: web
+        run: npm test
+
+      - name: Web UI — build into Android assets
+        working-directory: web
+        run: npx vite build
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Android — debug APK
+        working-directory: android
+        run: ./gradlew :app:assembleDebug -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }}
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: you-music-debug-${{ github.run_number }}
+          path: android/app/build/outputs/apk/debug/*.apk
+
+      # Every push to the default branch refreshes the "nightly" pre-release, so there is always an APK to install.
+      - name: Android — nightly release APK
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        working-directory: android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          fi
+          ./gradlew :app:assembleRelease -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }}-nightly
+          mkdir -p ../dist && cp app/build/outputs/apk/release/app-release.apk ../dist/you-music-nightly.apk
+
+      - name: Publish nightly
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd examples/mods && for d in */; do (cd "$d" && zip -qr "../../../dist/mod-${d%/}.zip" .); done)
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly dist/* --prerelease --target "$GITHUB_SHA" \
+            --title "Nightly ${GITHUB_SHA::7}" \
+            --notes "Сборка из последнего коммита ветки ${GITHUB_REF_NAME}. Установите you-music-nightly.apk. Примеры модов — zip-файлы рядом."

@@ -55,6 +55,11 @@ export function createModApi(mod: InstalledMod, granted: Set<string>, runtime: M
     apiVersion: MOD_API_VERSION,
     baseUrl: mod.baseUrl,
 
+    /** Wraps a callback you schedule yourself (timers, listeners) so an error disables the mod instead of leaking. */
+    safe<A extends unknown[], R>(fn: (...args: A) => R) {
+      return guard(id, fn);
+    },
+
     /** Subscribe to player and UI events. Returns an unsubscribe function. */
     on<K extends keyof UiEvents>(event: K, handler: (data: UiEvents[K]) => void) {
       return track(uiBus.on(event, guard(id, handler) as (d: UiEvents[K]) => void));

@@ -1,5 +1,5 @@
 import type { Transport } from './bridge';
-import type { Commands, Download, HistoryEntry, Like, Playlist, Track } from './contract';
+import type { Commands, Download, HistoryEntry, InstalledMod, Like, Playlist, Track } from './contract';
 
 /**
  * In-memory stand-in for the Android layer, used by `npm run dev` in a desktop browser and by the screenshot
@@ -267,7 +267,8 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
   localImport: () => [],
   localRemove: () => undefined,
 
-  modsList: () => [],
+  // Tests can inject installed mods (see scripts/mods-check.mjs).
+  modsList: () => (window as unknown as { __mockMods?: InstalledMod[] }).__mockMods ?? [],
   modStage: () => null,
   modInstall: () => {
     throw new Error('Моды доступны только в приложении');
