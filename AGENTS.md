@@ -28,7 +28,8 @@ android/                 Kotlin, AGP 9 (встроенный Kotlin), Gradle wra
     ai/                  AiClient — OpenAI-совместимый chat/completions; ключ хранится только нативно; AiFallback — нейросеть аккаунта, если своя выключена
     cloud/               ServerClient — необязательный аккаунт на https://grzxk.ru/youmusic: вход, синхронизация (backupExport/merge-import), AI с лимитом, прокси;
                          токен и данные прокси — в отдельных SharedPreferences "server" (не в kv, не попадают в копию)
-    local/, mods/, art/, system/
+    system/              ProgressNotifications (уведомления: загрузка новой версии, скачивание музыки), ActivityHost
+    local/, mods/, art/
   app/schemas/           схемы Room — коммитить при изменении БД (и писать миграцию)
 web/                     TypeScript + Vite, без фреймворков
   src/bridge/            contract.ts (типы команд/событий), bridge.ts (единственное место, знающее о платформе), mock.ts (браузер/скриншоты)
@@ -109,3 +110,4 @@ cd ../android
 | 2026-10-28 | Кликабельный исполнитель (`ui/artistLink.ts`, поиск канала по имени), `swallowNextClick` после закрытия плеера/шторок и `.mini-shield`; глобальная полоска загрузки (`busy()`, `player.preparing`), «Поток» и нейросеть грузятся параллельно (`Wave.refillExtra`, OkHttp до 16 запросов на хост); замена недоступного видео другой загрузкой (`StreamResolver.resolveOrAlternative`, `q`/`d` в `ym://`-URI); сервер `server/` + `cloud/ServerClient` + команды `server*`; онбординг (тема → перенос → аккаунт); темы Liquid Glass, Catppuccin, Nord, Synthwave; новая иконка (Material You, монохромная версия). |
 | 2026-10-28 | Исполнитель в мини-плеере больше не кликабелен — нажатие открывает плеер; ссылка на исполнителя только в открытом плеере и списках. Исправлена сборка (`ServerClient.saveUser`). |
 | 2026-10-28 | `.button-row` переносит кнопки на новую строку, если они не помещаются («Скачать избранное» вылезало за край). |
+| 2026-10-28 | Уведомления о прогрессе (`system/ProgressNotifications`, канал `progress`): загрузка новой версии и очередь скачивания музыки; слушают `UpdateManager.onState` и `DownloadRepository.onProgress`. |

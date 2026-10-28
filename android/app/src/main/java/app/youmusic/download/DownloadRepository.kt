@@ -40,6 +40,9 @@ class DownloadRepository(
 ) {
     private val ready = ConcurrentHashMap<String, File>()
 
+    /** Every progress event (the status-bar notification listens). */
+    var onProgress: ((DownloadDto) -> Unit)? = null
+
     suspend fun init() {
         db.downloads().all().filter { it.status == DownloadStatus.DONE }.forEach { d ->
             d.filePath?.let(::File)?.takeIf { it.exists() }?.let { ready[d.trackId] = it }
@@ -88,7 +91,7 @@ class DownloadRepository(
         ready.remove(trackId)
         db.downloads().delete(trackId)
         library.track(trackId)?.takeIf { it.source == "yt" }?.let { paths.artFile(trackId).delete() }
-        EventBus.emit("downloadProgress", DownloadDto(trackId, null, "removed", 0f, 0, row?.quality ?: "", null, null))
+        emit(DownloadDto(trackId, null, "removed", 0f, 0, row?.quality ?: "", null, null))
     }
 
     fun totalBytes(): Long = paths.downloads.listFiles()?.sumOf { it.length() } ?: 0
@@ -185,7 +188,10 @@ class DownloadRepository(
     private fun partFiles(trackId: String) =
         paths.downloads.listFiles { f -> f.name.startsWith(AppPaths.safe(trackId) + ".") }.orEmpty().toList()
 
-    private fun emit(dto: DownloadDto) = EventBus.emit("downloadProgress", dto)
+    private fun emit(dto: DownloadDto) {
+        EventBus.emit("downloadProgress", dto)
+        onProgress?.invoke(dto)
+    }
 
     private fun DownloadEntity.toDto(track: TrackDto?) =
         DownloadDto(trackId, track, status, progress, bytes, quality, localArt(trackId), error)

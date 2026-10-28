@@ -29,6 +29,7 @@ import app.youmusic.source.LyricsRepository
 import app.youmusic.source.NewPipeHttp
 import app.youmusic.source.StreamResolver
 import app.youmusic.source.YouTubeRepository
+import app.youmusic.system.ProgressNotifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,10 +70,13 @@ class AppGraph(app: Application) {
     )
     val playbackDataSource = PlaybackDataSourceFactory(app, mediaCache, resolver, downloads, network)
     val player = PlayerController(app, paths, appScope)
+    val progressNotifications = ProgressNotifications(app)
 
     init {
         updates.beforeInstall = { backup.saveNow() }
         ai.fallback = server
+        updates.onState = { progressNotifications.update(it.status, it.progress, it.latest?.versionName.orEmpty()) }
+        downloads.onProgress = { progressNotifications.download(it) }
         // A new public IP (VPN on/off, Wi-Fi ↔ mobile) invalidates googlevideo URLs.
         network.onChange { _, _ -> dropStreamUrls() }
     }

@@ -58,9 +58,13 @@ class UpdateManager(private val context: Context, private val kv: KeyValueStore)
     var state = UpdateStateDto(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong(), status = "idle")
         private set
 
+    /** Every state change (the status-bar notification listens). */
+    var onState: ((UpdateStateDto) -> Unit)? = null
+
     private fun set(next: UpdateStateDto) {
         state = next
         EventBus.emit("updateState", next)
+        onState?.invoke(next)
     }
 
     private fun versionUrl(channel: String) =
