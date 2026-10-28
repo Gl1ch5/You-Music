@@ -4,7 +4,6 @@ import { currentTrack, livePosition, player } from '../core/store';
 import { artFor } from '../services/art';
 import { next, previous, togglePlay } from '../services/playback';
 import { cover, haptic, likeButton, onFrame, playButton, setCoverUrls } from '../ui/components';
-import { linkArtist } from '../ui/artistLink';
 import { dragPlayer, openPlayer, releasePlayer, setMiniCoverSource } from './full';
 
 /**
@@ -17,7 +16,6 @@ export function mountMiniPlayer(): HTMLElement {
   const coverBox = h('div.mini-cover', null, art);
   const title = h('div.row-title.ellipsis');
   const artist = h('div.row-sub.ellipsis');
-  linkArtist(artist, () => currentTrack.peek());
   const swipe = h('div.mini-swipe', null, coverBox, h('div.mini-text', null, title, artist));
   const line = h('i');
   const el = h(
