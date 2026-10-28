@@ -28,18 +28,25 @@ function waveHero(scope: Scope): HTMLElement {
   const rings = h('div.wave-rings', null, h('i'), h('i'), h('i'));
   const btn = playButton(scope, {
     size: 'lg',
-    playing: () => player.playing.value && player.context.value?.kind === 'wave',
+    playing: () => {
+      const inWave = player.context.value?.kind === 'wave';
+      return player.wantsPlay.value && inWave;
+    },
+    loading: () => {
+      const inWave = player.context.value?.kind === 'wave';
+      return player.buffering.value && player.wantsPlay.value && inWave;
+    },
     onToggle: () => (isWaveActive() ? togglePlay() : playWave()),
   });
   const pill = h('div.now-pill');
   const modes = h('div.chips', { style: { justifyContent: 'center', padding: '0' } });
 
   scope.effect(() => {
-    rings.classList.toggle('paused', !(player.playing.value && player.context.value?.kind === 'wave'));
-    const t = currentTrack.value;
     const inWave = player.context.value?.kind === 'wave';
+    rings.classList.toggle('paused', !(player.playing.value && inWave));
+    const t = currentTrack.value;
     pill.hidden = !(t && inWave);
-    if (t && inWave) replaceChildren(pill, h('span.ellipsis', null, `${t.artist} — ${t.title}`), likeButton(scope, () => currentTrack.peek()));
+    if (t && inWave) replaceChildren(pill, h('span.ellipsis', null, `${t.artist} — ${t.title}`), likeButton(scope, () => currentTrack.value));
   });
   scope.effect(() => {
     const mode = app.settings.value.waveMode;

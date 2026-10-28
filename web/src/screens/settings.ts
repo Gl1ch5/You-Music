@@ -76,6 +76,7 @@ defineRoute('settings', ({ scope }) => {
         'Библиотека',
         listItem({ icon: 'export', title: 'Экспорт библиотеки', sub: 'Лайки и плейлисты в JSON', onClick: exportLibrary }),
         listItem({ icon: 'import', title: 'Импорт библиотеки', sub: 'Из файла экспорта', onClick: importLibrary }),
+        listItem({ icon: 'playlist', title: 'Перенос из Spotify и Яндекс Музыки', sub: 'По ссылке, списком или CSV', onClick: () => navigate('import') }),
       ),
       group('Моды', listItem({ icon: 'puzzle', title: 'Моды', sub: `${mods.value.filter((m) => m.state.enabled).length} включено`, onClick: () => navigate('mods') })),
       group(

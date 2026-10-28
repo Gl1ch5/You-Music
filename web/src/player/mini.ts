@@ -22,8 +22,8 @@ export function mountMiniPlayer(): HTMLElement {
     'div.mini.hidden',
     { attrs: { role: 'button', 'aria-label': 'Открыть плеер' } },
     swipe,
-    likeButton(scope, () => currentTrack.peek()),
-    playButton(scope, { size: 'sm', flat: true, playing: () => player.playing.value, onToggle: togglePlay }),
+    likeButton(scope, () => currentTrack.value),
+    playButton(scope, { size: 'sm', flat: true, playing: () => player.wantsPlay.value, loading: () => player.buffering.value && player.wantsPlay.value, onToggle: togglePlay }),
     h('div.mini-line', null, line),
   );
   setMiniCoverSource(() => (el.classList.contains('hidden') ? null : coverBox.getBoundingClientRect()));

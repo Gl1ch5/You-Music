@@ -52,6 +52,7 @@ defineRoute('collection', ({ scope }) => {
       tile('download', 'Скачанное', tracksLabel(done), () => navigate('downloads')),
       tile('folder', 'Мои файлы', tracksLabel(app.local.value.length), () => navigate('local')),
       tile('clock', 'История', 'Прослушивания', () => navigate('history')),
+      tile('import', 'Перенос музыки', 'Spotify, Яндекс, списком', () => navigate('import')),
     );
   });
 

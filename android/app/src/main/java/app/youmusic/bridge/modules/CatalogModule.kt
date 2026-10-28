@@ -9,6 +9,8 @@ import app.youmusic.model.LyricsDto
 import app.youmusic.model.PaletteDto
 import app.youmusic.model.SearchPageDto
 import app.youmusic.model.TrackDetailsDto
+import app.youmusic.source.ImportRepository
+import app.youmusic.source.ImportedListDto
 import app.youmusic.source.LyricsRepository
 import app.youmusic.source.YouTubeRepository
 import kotlinx.serialization.Serializable
@@ -19,11 +21,12 @@ import kotlinx.serialization.Serializable
 @Serializable data class UrlArgs(val url: String)
 @Serializable data class LyricsArgs(val artist: String, val title: String, val durationMs: Long = 0)
 
-/** Read-only catalogue: YouTube search and pages, lyrics, artwork palettes. */
+/** Read-only catalogue: YouTube search and pages, lyrics, artwork palettes, import from other services. */
 class CatalogModule(
     private val youtube: YouTubeRepository,
     private val lyrics: LyricsRepository,
     private val artwork: ArtworkProcessor,
+    private val importer: ImportRepository,
 ) : BridgeModule {
     override fun register(registry: CommandRegistry) = with(registry) {
         command<SearchArgs, SearchPageDto>("search") { youtube.search(it.query, it.filter, it.page) }
@@ -33,5 +36,6 @@ class CatalogModule(
         command<UrlArgs, ArtistPageDto>("getArtist") { youtube.artist(it.url) }
         command<LyricsArgs, LyricsDto>("lyrics") { lyrics.lyrics(it.artist, it.title, it.durationMs) }
         command<UrlArgs, PaletteDto>("artworkPalette") { artwork.palette(it.url) }
+        command<UrlArgs, ImportedListDto>("importFetch") { importer.fetch(it.url) }
     }
 }

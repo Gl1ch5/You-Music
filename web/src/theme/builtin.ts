@@ -19,7 +19,7 @@ const base: Omit<Theme, 'id' | 'name' | 'colors' | 'dark'> = {
   radius: { cover: 12, card: 16, mini: 14 },
   font: { family: "'Inter Variable', 'Inter', system-ui, sans-serif", titleSize: 28 },
   spacing: { unit: 8 },
-  motion: { press: 120, base: 220, open: 320, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+  motion: { press: 90, base: 160, open: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
   icons: { set: 'graphite', stroke: 1.5 },
   dynamic: { intensity: 0.5, dim: 0.72 },
   grain: 0.025,

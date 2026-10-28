@@ -74,7 +74,7 @@ type Emit = (name: string, data: unknown) => void;
 let emit: Emit = () => undefined;
 
 function state() {
-  emit('stateChanged', { playing, buffering: false, repeat, shuffle, ended: false });
+  emit('stateChanged', { playing, playWhenReady: playing, buffering: false, repeat, shuffle, ended: false });
 }
 function progress() {
   emit('progress', { positionMs: position, durationMs: queue[index]?.durationMs ?? 0, bufferedMs: position });
@@ -210,6 +210,11 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     };
   },
   lyrics: () => ({ synced: Array.from({ length: 24 }, (_, i) => `[00:${String(i * 4).padStart(2, '0')}.00] ${['Ночной город дышит светом', 'Мы едем вдоль пустых витрин', 'И музыка звучит как ветер', 'Который знает, что ты один'][i % 4]}`).join('\n') }),
+  importFetch: () => ({
+    title: 'Мой плейлист из Spotify',
+    source: 'spotify',
+    tracks: tracks.slice(8, 14).map((t) => ({ title: t.title, artist: t.artist, durationMs: t.durationMs })),
+  }),
   artworkPalette: ({ url }) => {
     const i = tracks.findIndex((t) => t.artwork === url);
     return { blurUrl: url, color: PALETTES[(i + 1) % PALETTES.length][0] };

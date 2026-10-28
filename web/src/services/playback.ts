@@ -34,6 +34,7 @@ export async function playTracks(tracks: Track[], index: number, context: PlayCo
   const start = Math.max(0, list.findIndex((t) => t.id === selected?.id));
   if (context?.kind !== 'wave') wave = null;
   player.context.value = context;
+  expectLoading();
   await call('play', { queue: list, index: start });
 }
 
@@ -76,10 +77,21 @@ async function extendWave(): Promise<void> {
   }
 }
 
+/** Flip the glyph immediately; native state events confirm or correct it a moment later. */
 export function togglePlay(): void {
-  if (player.playing.peek()) call('pause');
-  else if (currentTrack.peek()) call('resume');
-  else playWave();
+  if (player.wantsPlay.peek()) {
+    player.wantsPlay.value = false;
+    call('pause');
+  } else if (currentTrack.peek()) {
+    player.wantsPlay.value = true;
+    call('resume');
+  } else playWave();
+}
+
+/** Shows the loading ring right away for actions that will start a new stream. */
+export function expectLoading(): void {
+  player.wantsPlay.value = true;
+  player.buffering.value = true;
 }
 
 export function next(): void {
@@ -89,6 +101,7 @@ export function next(): void {
     uiBus.emit('skip', { track, positionMs: pos });
     wave?.feedback('skip', track);
   }
+  if (player.index.peek() < player.queue.peek().length - 1) expectLoading();
   call('next');
 }
 
@@ -117,6 +130,7 @@ export function initPlayback(): void {
   });
   onNative('stateChanged', (s) => {
     player.playing.value = s.playing;
+    player.wantsPlay.value = s.playWhenReady && !s.ended;
     player.buffering.value = s.buffering;
     player.repeat.value = s.repeat;
     player.shuffle.value = s.shuffle;
@@ -156,6 +170,7 @@ export async function restorePlayer(): Promise<void> {
   player.queue.value = s.queue;
   player.index.value = s.index;
   player.playing.value = s.playing;
+  player.wantsPlay.value = s.playing;
   player.repeat.value = s.repeat;
   player.shuffle.value = s.shuffle;
   player.position.value = { ms: s.positionMs, durationMs: s.durationMs, at: performance.now() };

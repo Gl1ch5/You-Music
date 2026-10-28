@@ -8,7 +8,7 @@ import { mutedGlow } from '../theme/engine';
 import { artFor } from '../services/art';
 import { related } from '../services/catalog';
 import { download, removeDownload } from '../services/library';
-import { next, playTracks, previous, seek, togglePlay } from '../services/playback';
+import { expectLoading, next, playTracks, previous, seek, togglePlay } from '../services/playback';
 import { onBack } from '../ui/back';
 import { button, emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
 import { applyDynamicBackground } from '../ui/hero';
@@ -73,7 +73,7 @@ export function mountFullPlayer(): HTMLElement {
     null,
     head,
     art,
-    h('div.player-meta', null, h('div', { style: { flex: '1', minWidth: '0' } }, title, artist), likeButton(scope, () => currentTrack.peek())),
+    h('div.player-meta', null, h('div', { style: { flex: '1', minWidth: '0' } }, title, artist), likeButton(scope, () => currentTrack.value)),
     progress.el,
     h('div.times', null, progress.elapsed, progress.remaining),
     h(
@@ -81,7 +81,7 @@ export function mountFullPlayer(): HTMLElement {
       null,
       shuffleBtn,
       iconButton('prev', 'Предыдущий', () => previous(), 'big on'),
-      playButton(scope, { size: 'lg', playing: () => player.playing.value, onToggle: togglePlay }),
+      playButton(scope, { size: 'lg', playing: () => player.wantsPlay.value, loading: () => player.buffering.value && player.wantsPlay.value, onToggle: togglePlay }),
       iconButton('next', 'Следующий', () => next(), 'big on'),
       repeatBtn,
     ),
@@ -108,7 +108,7 @@ export function mountFullPlayer(): HTMLElement {
       if (g) root.style.setProperty('--glow', g);
     });
   });
-  scope.effect(() => art.classList.toggle('paused', !player.playing.value));
+  scope.effect(() => art.classList.toggle('paused', !player.wantsPlay.value));
 
   attachDragToClose(head, art);
   return root;
@@ -265,7 +265,10 @@ function openQueue(): void {
           queue.map((t, i) => {
             const row = trackRow(t, {
               sub: i === index ? 'Сейчас играет' : t.artist,
-              onPlay: () => call('skipTo', { index: i }),
+              onPlay: () => {
+                expectLoading();
+                call('skipTo', { index: i });
+              },
               onMore: () =>
                 openTrackMenu(t, {
                   actions: [

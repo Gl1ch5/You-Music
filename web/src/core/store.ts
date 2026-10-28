@@ -48,6 +48,8 @@ export const player = {
   queue: signal<Track[]>([]),
   index: signal(-1),
   playing: signal(false),
+  /** The user wants playback (play pressed), even while the stream is still loading. Drives the play/pause glyph. */
+  wantsPlay: signal(false),
   buffering: signal(false),
   repeat: signal<RepeatMode>('off'),
   shuffle: signal(false),

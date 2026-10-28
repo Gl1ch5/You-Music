@@ -142,6 +142,19 @@ export interface Palette {
   color?: string | null;
 }
 
+/** Track list read from another service (Spotify, Yandex Music) or pasted as text. */
+export interface ImportedTrack {
+  title: string;
+  artist: string;
+  durationMs: number;
+}
+
+export interface ImportedList {
+  title: string;
+  source: string;
+  tracks: ImportedTrack[];
+}
+
 export interface Lyrics {
   plain?: string | null;
   synced?: string | null;
@@ -223,6 +236,7 @@ export interface Commands {
   getArtist: [{ url: string }, ArtistPage];
   lyrics: [{ artist: string; title: string; durationMs: number }, Lyrics];
   artworkPalette: [{ url: string }, Palette];
+  importFetch: [{ url: string }, ImportedList];
 
   getLibrary: [None, Library];
   like: [{ track: Track; liked: boolean }, void];
@@ -259,7 +273,7 @@ export type ResultOf<K extends CommandName> = Commands[K][1];
 /** Native → UI events. */
 export interface NativeEvents {
   progress: { positionMs: number; durationMs: number; bufferedMs: number };
-  stateChanged: { playing: boolean; buffering: boolean; repeat: RepeatMode; shuffle: boolean; ended: boolean };
+  stateChanged: { playing: boolean; playWhenReady: boolean; buffering: boolean; repeat: RepeatMode; shuffle: boolean; ended: boolean };
   trackChanged: { track: Track | null; index: number };
   queueChanged: { queue: Track[]; index: number };
   playerError: { code: string; message: string; trackId: string | null };

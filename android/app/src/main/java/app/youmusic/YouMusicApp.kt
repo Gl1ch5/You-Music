@@ -17,6 +17,7 @@ import app.youmusic.mods.ModStore
 import app.youmusic.net.NetworkMonitor
 import app.youmusic.player.PlaybackDataSourceFactory
 import app.youmusic.player.PlayerController
+import app.youmusic.source.ImportRepository
 import app.youmusic.source.LyricsRepository
 import app.youmusic.source.NewPipeHttp
 import app.youmusic.source.StreamResolver
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.services.youtube.YoutubeJavaScriptPlayerManager
 import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.localization.Localization
 import java.util.Locale
@@ -46,6 +48,7 @@ class AppGraph(app: Application) {
     val mods = ModStore(app, paths)
     val artwork = ArtworkProcessor(paths)
     val lyrics = LyricsRepository()
+    val importer = ImportRepository()
     val mediaCache = SimpleCache(
         paths.media,
         LeastRecentlyUsedCacheEvictor(kv.settings.cacheLimitMb.coerceIn(64, 8192).toLong() shl 20),
@@ -62,9 +65,15 @@ class YouMusicApp : Application() {
         NewPipe.init(NewPipeHttp, Localization(locale.language, locale.country.ifEmpty { null }), ContentCountry(locale.country.ifEmpty { "US" }))
         graph = AppGraph(this)
         graph.appScope.launch { graph.downloads.init() }
+        // Fetch YouTube's player script once up front so the first tap on a track doesn't pay for it.
+        graph.appScope.launch {
+            if (graph.network.online) runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(WARMUP_VIDEO_ID) }
+        }
     }
 
     companion object {
+        private const val WARMUP_VIDEO_ID = "dQw4w9WgXcQ"
+
         lateinit var graph: AppGraph
             private set
     }

@@ -47,7 +47,7 @@ const PLAY_D = 'M8 5 L8 12 L8 19 L19.5 12 Z M19.5 12 L19.5 12 L19.5 12 L19.5 12 
 const PAUSE_D = 'M6.5 5 L10.3 5 L10.3 19 L6.5 19 Z M13.7 5 L17.5 5 L17.5 19 L13.7 19 Z';
 
 /** Bone circle with a morphing glyph. `playing` decides the glyph; `onToggle` runs on tap. */
-export function playButton(scope: Scope, opts: { size?: 'sm' | 'lg' | ''; playing: () => boolean; onToggle: () => void; flat?: boolean }): HTMLButtonElement {
+export function playButton(scope: Scope, opts: { size?: 'sm' | 'lg' | ''; playing: () => boolean; loading?: () => boolean; onToggle: () => void; flat?: boolean }): HTMLButtonElement {
   const path = svg('path', { d: PLAY_D });
   const glyph = svg('svg', { class: 'morph', viewBox: '0 0 24 24' }, path);
   const btn = h(`button.play-btn${opts.size ? '.' + opts.size : ''}${opts.flat ? '.flat' : ''}`, {
@@ -63,6 +63,7 @@ export function playButton(scope: Scope, opts: { size?: 'sm' | 'lg' | ''; playin
     path.setAttribute('d', playing ? PAUSE_D : PLAY_D);
     path.style.setProperty('d', `path('${playing ? PAUSE_D : PLAY_D}')`);
     btn.setAttribute('aria-label', playing ? 'Пауза' : 'Играть');
+    btn.classList.toggle('loading', !!opts.loading?.());
   });
   return btn;
 }
@@ -87,8 +88,10 @@ export function likeButton(scope: Scope, track: () => Track | null, cls = ''): H
     },
   }, glyph);
   scope.effect(() => {
+    // Read the liked set first so the effect stays subscribed even while there is no track yet.
+    const ids = likedIds.value;
     const t = track();
-    const on = !!t && likedIds.value.has(t.id);
+    const on = !!t && ids.has(t.id);
     btn.classList.toggle('on', on);
     btn.setAttribute('aria-pressed', String(on));
   });

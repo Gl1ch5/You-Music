@@ -257,6 +257,7 @@
   border-radius: 50%;
   background: var(--accent);
   color: var(--on-accent);
+  position: relative;
   display: grid;
   place-items: center;
   flex: none;
@@ -267,6 +268,35 @@
   transform: scale(0.94);
   transition-duration: var(--t-press);
   transition-timing-function: var(--ease);
+}
+
+.play-btn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  opacity: 0;
+  transition: opacity var(--t-base) var(--ease);
+  pointer-events: none;
+}
+
+.play-btn.flat::after {
+  inset: 2px;
+  border-top-color: var(--text);
+}
+
+/* Loading: a thin arc spins around the button while the stream is being prepared. */
+.play-btn.loading::after {
+  opacity: 1;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .play-btn.lg {
@@ -1154,6 +1184,13 @@
   color: var(--text);
   outline: 0;
   font-size: 16px;
+}
+
+.textfield.area {
+  height: 140px;
+  padding: var(--s-3) var(--s-4);
+  resize: none;
+  font-size: var(--fs-body);
 }
 
 .textfield:focus {

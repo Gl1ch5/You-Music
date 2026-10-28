@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
@@ -43,9 +44,17 @@ class PlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
+            // Start as soon as ~0.7 s is buffered instead of the default 2.5 s.
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(15_000, 60_000, 700, 2_000)
+                    .build(),
+            )
             .build()
 
         tracker = PlaybackHistoryTracker(player, graph.library, graph.appScope)
+        val prefetcher = StreamPrefetcher(player, graph.resolver, graph.downloads, graph.network, graph.appScope)
+        player.addListener(prefetcher)
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 val mapped = (error.cause ?: error).toBridgeException()

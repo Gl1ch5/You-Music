@@ -31,7 +31,14 @@ data class TrackChangedDto(val track: TrackDto?, val index: Int)
 data class QueueChangedDto(val queue: List<TrackDto>, val index: Int)
 
 @Serializable
-data class StateChangedDto(val playing: Boolean, val buffering: Boolean, val repeat: String, val shuffle: Boolean, val ended: Boolean)
+data class StateChangedDto(
+    val playing: Boolean,
+    val playWhenReady: Boolean,
+    val buffering: Boolean,
+    val repeat: String,
+    val shuffle: Boolean,
+    val ended: Boolean,
+)
 
 /** App-side handle to the playback session. All methods hop to the main thread, as Media3 requires. */
 class PlayerController(
@@ -98,7 +105,7 @@ class PlayerController(
                 EventBus.emit("trackChanged", TrackChangedDto(p.currentMediaItem?.track(), p.currentMediaItemIndex))
             }
             if (events.containsAny(
-                    Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
+                    Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_PLAY_WHEN_READY_CHANGED,
                     Player.EVENT_REPEAT_MODE_CHANGED, Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED,
                 )
             ) {
@@ -106,6 +113,7 @@ class PlayerController(
                     "stateChanged",
                     StateChangedDto(
                         playing = p.isPlaying,
+                        playWhenReady = p.playWhenReady,
                         buffering = p.playbackState == Player.STATE_BUFFERING,
                         repeat = repeatName(p.repeatMode),
                         shuffle = p.shuffleModeEnabled,

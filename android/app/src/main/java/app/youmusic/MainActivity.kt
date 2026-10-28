@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity(), ActivityHost {
         listOf(
             SystemModule(applicationContext, graph.kv, graph.network, this),
             PlayerModule(graph.player),
-            CatalogModule(graph.youtube, graph.lyrics, graph.artwork),
+            CatalogModule(graph.youtube, graph.lyrics, graph.artwork, graph.importer),
             LibraryModule(graph.library, graph.downloads),
             OfflineModule(graph.downloads, graph.local, graph.mediaCache, graph.paths, graph.kv, this),
             ModsModule(graph.mods, this),

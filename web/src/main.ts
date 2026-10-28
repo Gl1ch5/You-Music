@@ -11,6 +11,7 @@ import './screens/catalog';
 import './screens/offline';
 import './screens/settings';
 import './screens/themeEditor';
+import './screens/import';
 
 import { goBack } from './app/router';
 import { mountShell } from './app/shell';

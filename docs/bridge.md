@@ -59,6 +59,7 @@
 | `trackDetails` | `{id}` | `{track, related}` |
 | `getCollection` / `getArtist` | `{url}` | `CollectionPage` / `ArtistPage` |
 | `lyrics` | `{artist, title, durationMs}` | `{plain?, synced?}` (LRCLIB) |
+| `importFetch` | `{url}` | `{title, source, tracks: {title, artist, durationMs}[]}` — список из Spotify / Яндекс Музыки по публичной ссылке |
 | `artworkPalette` | `{url}` | `{blurUrl, color}` — размытая обесцвеченная обложка + приглушённый тон |
 | **Библиотека** | | |
 | `getLibrary` | — | `{likes, playlists, downloads, local}` |
@@ -83,7 +84,7 @@
 | Событие | Данные |
 |---|---|
 | `progress` | `{positionMs, durationMs, bufferedMs}` — раз в 500 мс во время игры; UI интерполирует через `requestAnimationFrame` |
-| `stateChanged` | `{playing, buffering, repeat, shuffle, ended}` |
+| `stateChanged` | `{playing, playWhenReady, buffering, repeat, shuffle, ended}` |
 | `trackChanged` | `{track, index}` |
 | `queueChanged` | `{queue, index}` |
 | `playerError` | `{code, message, trackId}` |
