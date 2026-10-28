@@ -64,12 +64,15 @@ export async function deleteCustomTheme(id: string): Promise<void> {
   await call('kvSet', { key: CUSTOM_KEY, value: JSON.stringify(customThemes.value) });
 }
 
+/** Partial theme as it may come from a file: every group optional, every field optional. */
+export type ThemeInput = { [K in keyof Theme]?: Theme[K] extends object ? Partial<Theme[K]> : Theme[K] };
+
 const HEX = /^#[0-9a-f]{6}$/i;
 const clamp = (v: unknown, min: number, max: number, def: number) =>
   typeof v === 'number' && isFinite(v) ? Math.min(max, Math.max(min, v)) : def;
 
 /** Accepts partial or foreign JSON and fills everything missing from Graphite, clamping values to sane ranges. */
-export function sanitizeTheme(input: Partial<Theme> & Record<string, unknown>): Theme {
+export function sanitizeTheme(input: ThemeInput): Theme {
   const g = graphite;
   const colors = { ...g.colors };
   for (const token of COLOR_TOKENS) {

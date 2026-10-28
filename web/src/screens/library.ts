@@ -2,7 +2,7 @@ import { defineRoute, goBack, navigate } from '../app/router';
 import { call } from '../bridge/bridge';
 import type { Playlist, Track } from '../bridge/contract';
 import { h, icon, replaceChildren, tracksLabel } from '../core/dom';
-import type { Scope } from '../core/signal';
+import { track, type Scope } from '../core/signal';
 import { app } from '../core/store';
 import { createPlaylist, download } from '../services/library';
 import { playTracks, shuffle } from '../services/playback';
@@ -11,7 +11,7 @@ import { pageHero, totalDuration } from '../ui/hero';
 import { actionSheet, confirmSheet, promptSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
 import { trackList } from '../ui/trackList';
-import { openTrackMenu } from '../ui/trackMenu';
+import { openTrackMenu, type MenuExtras } from '../ui/trackMenu';
 
 /** Shared list page: hero with play / shuffle / download, then the tracks. */
 export function listPage(
@@ -24,7 +24,7 @@ export function listPage(
     context: string;
     numbered?: boolean;
     menu?: () => void;
-    rowMenu?: (t: Track, i: number) => Parameters<typeof openTrackMenu>[1];
+    rowMenu?: (t: Track, i: number) => MenuExtras;
     empty?: HTMLElement;
   },
 ): HTMLElement {
@@ -136,7 +136,7 @@ defineRoute('playlist', ({ scope, params }) => {
         } },
       ]);
     if (editing) {
-      replaceChildren(holder, reorderPage(scope, playlist, tracks, () => {
+      replaceChildren(holder, reorderPage(playlist, tracks, () => {
         editing = false;
         render();
       }));
@@ -163,7 +163,7 @@ defineRoute('playlist', ({ scope, params }) => {
 });
 
 /** Drag rows by the grip to reorder; each drop is saved immediately. */
-function reorderPage(scope: Scope, playlist: Playlist, tracks: Track[], done: () => void): HTMLElement {
+function reorderPage(playlist: Playlist, tracks: Track[], done: () => void): HTMLElement {
   const screen = h('div.screen');
   const bar = appBar({ title: playlist.name, back: done, alwaysTitle: true, actions: [iconButton('check', 'Готово', done)] });
   const list = h('div.list');
@@ -203,7 +203,7 @@ function reorderPage(scope: Scope, playlist: Playlist, tracks: Track[], done: ()
   return screen;
 }
 
-defineRoute('history', ({ scope }) => {
+defineRoute('history', () => {
   const screen = h('div.screen');
   const bar = appBar({
     title: 'История',
@@ -258,8 +258,7 @@ defineRoute('history', ({ scope }) => {
 export function onLibraryChange(scope: Scope, fn: () => void): void {
   let first = true;
   scope.effect(() => {
-    app.playlists.value;
-    app.likes.value;
+    track(app.playlists, app.likes);
     if (first) first = false;
     else fn();
   });

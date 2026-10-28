@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 // The build goes straight into the Android assets; WebViewAssetLoader serves it from https://appassets.androidplatform.net/.
 export default defineConfig({

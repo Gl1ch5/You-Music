@@ -38,6 +38,11 @@ export class Signal<T> implements ReadSignal<T> {
 
 export const signal = <T>(v: T) => new Signal(v);
 
+/** Subscribes the running effect to signals whose values it does not otherwise read. */
+export function track(...signals: ReadSignal<unknown>[]): void {
+  signals.forEach((s) => s.value);
+}
+
 /** Runs `fn` now and whenever a signal it read changes. Returns a disposer. */
 export function effect(fn: () => void): () => void {
   const runner: Runner = {

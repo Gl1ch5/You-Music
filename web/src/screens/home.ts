@@ -2,7 +2,7 @@ import { defineRoute, navigate } from '../app/router';
 import { call } from '../bridge/bridge';
 import type { Track } from '../bridge/contract';
 import { h, icon, replaceChildren } from '../core/dom';
-import type { Scope } from '../core/signal';
+import { track, type Scope } from '../core/signal';
 import { app, currentTrack, player, type Settings } from '../core/store';
 import { Wave } from '../logic/recommend';
 import { hooks, runHooks } from '../mods/registry';
@@ -80,7 +80,7 @@ function recommendationsSection(scope: Scope): HTMLElement {
       .catch(() => replaceChildren(body, h('div.pad.muted.small', null, 'Не удалось загрузить рекомендации.')));
   };
   scope.effect(() => {
-    app.settings.value.waveMode;
+    track(app.settings);
     if (app.online.value) reload();
   });
   const head = h('div.section-head', null, h('h2.h2', { style: { flex: '1' } }, 'Рекомендации'), iconButton('sparkle', 'Обновить', () => {
@@ -122,7 +122,7 @@ function recentSection(scope: Scope): HTMLElement {
       })
       .catch(() => (box.hidden = true));
   scope.effect(() => {
-    currentTrack.value;
+    track(currentTrack);
     load();
   });
   return box;

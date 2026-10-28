@@ -1,6 +1,6 @@
 import { defineRoute, goBack, navigate } from '../app/router';
 import { BridgeError } from '../bridge/bridge';
-import { h, replaceChildren } from '../core/dom';
+import { append, h, replaceChildren } from '../core/dom';
 import { resize } from '../services/art';
 import { artist, collection } from '../services/catalog';
 import { createPlaylist } from '../services/library';
@@ -70,7 +70,7 @@ defineRoute('artist', ({ scope, params }) => {
         const ctx = { kind: 'list' as const, title: displayName };
         const art = page.artist.artwork ? resize(page.artist.artwork, 544) : null;
         const top = page.tracks.slice(0, 10);
-        screen.append(
+        append(screen, [
           bar,
           pageHero(scope, {
             title: displayName,
@@ -79,7 +79,7 @@ defineRoute('artist', ({ scope, params }) => {
             artUrl: art,
             actions: page.tracks.length ? [playButton(scope, { playing: () => false, onToggle: () => playTracks(page.tracks, 0, ctx) })] : [],
           }),
-          page.tracks.length ? [sectionHead('Популярное'), trackList(scope, { tracks: top, scroller: screen, context: ctx })] : emptyState('note', 'Треков не нашлось'),
+          page.tracks.length ? h('section', null, sectionHead('Популярное'), trackList(scope, { tracks: top, scroller: screen, context: ctx })) : emptyState('note', 'Треков не нашлось'),
           page.albums.length
             ? h(
                 'section.section',
@@ -95,7 +95,7 @@ defineRoute('artist', ({ scope, params }) => {
               )
             : null,
           page.tracks.length > 10 ? h('section.section', null, sectionHead('Все треки'), trackList(scope, { tracks: page.tracks, scroller: screen, context: ctx })) : null,
-        );
+        ]);
         replaceChildren(holder, screen);
       })
       .catch((e) => replaceChildren(holder, errorPage(name, e, load)));

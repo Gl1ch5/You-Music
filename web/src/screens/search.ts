@@ -109,9 +109,9 @@ defineRoute('search', ({ scope }) => {
   };
 
   const showSuggestions = debounce(async (q: string) => {
-    if (!q.trim() || q !== input.value) return;
+    if (!q.trim() || q !== input.value || q.trim() === query) return;
     const list = await suggestions(q).catch(() => [] as string[]);
-    if (q !== input.value) return;
+    if (q !== input.value || q.trim() === query) return;
     renderChips(false);
     replaceChildren(body, list.map((s) => listItem({ icon: 'search', title: s, onClick: () => submit(s), trailing: icon('chevron-right', 'sm faint') })));
   }, 180);
@@ -168,6 +168,8 @@ defineRoute('search', ({ scope }) => {
 
   input.addEventListener('input', () => {
     clearBtn.hidden = !input.value;
+    query = '';
+    requestId++;
     if (!input.value.trim()) showIdle();
     else showSuggestions(input.value);
   });

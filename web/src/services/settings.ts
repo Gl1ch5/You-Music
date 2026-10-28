@@ -5,7 +5,7 @@ const KEY = 'settings';
 
 export async function loadSettings(): Promise<void> {
   const raw = await call('kvGet', { key: KEY }).catch(() => null);
-  let stored: Partial<Settings> = {};
+  let stored: Partial<Settings>;
   try {
     stored = raw ? JSON.parse(raw) : {};
   } catch {

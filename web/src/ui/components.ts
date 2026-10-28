@@ -1,7 +1,7 @@
 import { call } from '../bridge/bridge';
 import type { Track } from '../bridge/contract';
 import { formatTime, h, icon, prefersReducedMotion, setIcon, svg, type Child } from '../core/dom';
-import { effect, type Scope } from '../core/signal';
+import { effect, track, type Scope } from '../core/signal';
 import { app, currentTrack, isPlayable, likedIds, livePosition, player } from '../core/store';
 import { artFor, type ArtSize } from '../services/art';
 import { toggleLike } from '../services/library';
@@ -219,8 +219,7 @@ export function onFrame(scope: Scope, fn: () => void): void {
   progressSubscribers.add(fn);
   scope.add(() => progressSubscribers.delete(fn));
   scope.effect(() => {
-    player.playing.value;
-    player.position.value;
+    track(player.playing, player.position);
     fn();
     if (player.playing.peek() && !rafId) rafId = requestAnimationFrame(tick);
   });
@@ -287,9 +286,9 @@ export function reactiveIcon(scope: Scope, name: () => string, cls = ''): SVGEle
 }
 
 /** App bar that shows its title and a hairline once the page scrolls past `threshold`. */
-export function appBar(opts: { title: string; back?: () => void; actions?: Child[]; transparent?: boolean; alwaysTitle?: boolean }): HTMLElement {
+export function appBar(opts: { title: string; back?: () => void; actions?: Child[]; alwaysTitle?: boolean }): HTMLElement {
   return h(
-    `div.appbar${opts.transparent ? '.transparent' : ''}`,
+    'div.appbar',
     null,
     opts.back ? iconButton('back', 'Назад', opts.back) : h('span', { style: { width: 'var(--s-2)' } }),
     h(`div.appbar-title.ellipsis${opts.alwaysTitle ? '.always' : ''}`, null, opts.title),

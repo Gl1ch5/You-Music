@@ -49,7 +49,7 @@ export function cleanTitle(raw: string): string {
   let t = raw.replace(NOISE_RE, ' ');
   // "Song | Official Video", "Song / Lyrics"
   for (let i = 0; i < 3; i++) t = t.replace(TRAILING_NOISE_RE, '');
-  t = t.replace(/[()\[\]]\s*[()\[\]]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  t = t.replace(/[()[\]]\s*[()[\]]/g, ' ').replace(/\s{2,}/g, ' ').trim();
   t = t.replace(/[\s|\-–—:]+$/, '').trim();
   const q = t.match(QUOTES);
   return q ? q[1].trim() : t;
@@ -100,7 +100,7 @@ export function versionTags(title: string): string[] {
 export function songKey(track: Pick<Track, 'title' | 'artist'>): string {
   const title = track.title
     .toLowerCase()
-    .replace(/[\(\[].*?[\)\]]/g, ' ')
+    .replace(/[([].*?[)\]]/g, ' ')
     .replace(/\b(?:feat|ft|prod)\.?\s.*$/i, ' ')
     .replace(/\b(?:sped\s*up|slowed|reverb|remix|extended|live|acoustic|instrumental|nightcore|8d|remaster(?:ed)?|radio\s+edit|version|edit|mix)\b/g, ' ');
   return `${artistKey(track.artist)}|${compact(title)}`;

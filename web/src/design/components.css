@@ -98,11 +98,16 @@
   border-bottom-color: var(--line);
 }
 
-.appbar.transparent {
+.appbar.overlay {
   background: transparent;
-  position: absolute;
-  left: 0;
-  right: 0;
+  margin-bottom: calc((var(--appbar-h) + var(--safe-top)) * -1);
+  transition:
+    background var(--t-base) var(--ease),
+    border-color var(--t-base) var(--ease);
+}
+
+.appbar.overlay.scrolled {
+  background: var(--bg);
 }
 
 .appbar-title {
@@ -928,6 +933,8 @@
 
 .player-tools .btn {
   flex: 1;
+  min-width: 0;
+  padding: 0 var(--s-2);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -1429,4 +1436,14 @@ input[type='color']::-webkit-color-swatch {
   justify-content: center;
   gap: var(--s-2);
   margin-top: var(--s-2);
+}
+
+.player-tools .btn.square {
+  flex: none;
+  width: 40px;
+  padding: 0;
+}
+
+.field input::-webkit-search-cancel-button {
+  display: none;
 }
