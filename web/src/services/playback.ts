@@ -171,7 +171,9 @@ export function next(): void {
 }
 
 export const previous = () => call('previous');
-export const seek = (positionMs: number) => {
+export const seek = (ms: number) => {
+  // The native side expects whole milliseconds; a fraction from the slider used to make the call fail silently.
+  const positionMs = Math.max(0, Math.round(ms));
   player.position.value = { ...player.position.peek(), ms: positionMs, at: performance.now() };
   return call('seek', { positionMs });
 };

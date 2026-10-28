@@ -9,7 +9,7 @@ import app.youmusic.player.PlayerController
 import kotlinx.serialization.Serializable
 
 @Serializable data class PlayArgs(val queue: List<TrackDto>, val index: Int = 0, val positionMs: Long = 0)
-@Serializable data class SeekArgs(val positionMs: Long)
+@Serializable data class SeekArgs(val positionMs: Double)
 @Serializable data class IndexArgs(val index: Int)
 @Serializable data class MoveArgs(val from: Int, val to: Int)
 @Serializable data class QueueAddArgs(val tracks: List<TrackDto>, val next: Boolean = false)
@@ -27,7 +27,7 @@ class PlayerModule(private val player: PlayerController) : BridgeModule {
                 p.play()
             }
         }
-        command<SeekArgs, Unit>("seek") { a -> player.withPlayer { p -> p.seekTo(a.positionMs) } }
+        command<SeekArgs, Unit>("seek") { a -> player.withPlayer { p -> p.seekTo(a.positionMs.toLong().coerceAtLeast(0)) } }
         command<NoArgs, Unit>("next") { player.withPlayer { p -> if (p.hasNextMediaItem()) p.seekToNextMediaItem() } }
         command<NoArgs, Unit>("previous") {
             player.withPlayer { p ->
