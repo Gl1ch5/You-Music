@@ -2,6 +2,7 @@ import { defineRoute, goBack, navigate } from '../app/router';
 import { call } from '../bridge/bridge';
 import { formatBytes, h, replaceChildren } from '../core/dom';
 import { app, type Settings } from '../core/store';
+import { ICON_PACKS } from '../design/iconPacks';
 import { installModFlow, mods, removeMod, setModEnabled } from '../mods/host';
 import { guard, slots } from '../mods/registry';
 import { backupNow, backupStatus, backupSub, chooseBackupFolder, disableBackupFolder, exportAll, importAll } from '../services/backup';
@@ -14,6 +15,7 @@ import { actionSheet, confirmSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
 
 const QUALITY: Record<Settings['streamQuality'], string> = { high: 'Высокое', normal: 'Обычное', low: 'Экономия трафика' };
+const ICON_STYLES: Record<string, string> = { theme: 'Как в теме', ...Object.fromEntries(ICON_PACKS.map((p) => [p.id, p.name])) };
 const MOTION: Record<Settings['motion'], string> = { system: 'Как в системе', reduced: 'Уменьшить', full: 'Всегда плавно' };
 
 function choose<K extends string>(title: string, options: Record<K, string>, current: K, onPick: (k: K) => void): void {
@@ -59,6 +61,7 @@ defineRoute('settings', ({ scope }) => {
         'Оформление',
         listItem({ icon: 'palette', title: 'Тема', sub: theme.name, onClick: () => pickTheme() }),
         listItem({ icon: 'app-icon', title: 'Иконка приложения', sub: 'Светлые и тёмные варианты', onClick: () => navigate('appIcon') }),
+        listItem({ icon: 'grid', title: 'Значки', sub: ICON_STYLES[s.iconStyle] ?? ICON_STYLES.theme, onClick: () => choose('Значки', ICON_STYLES, s.iconStyle, (iconStyle) => saveSettings({ iconStyle })) }),
         listItem({ icon: 'edit', title: 'Редактор тем', sub: 'Цвета, скругления, зерно, анимации', onClick: () => navigate('themeEditor', { id: theme.id }) }),
         listItem({ icon: 'sparkle', title: 'Анимации', sub: MOTION[s.motion], onClick: () => choose('Анимации', MOTION, s.motion, (motion) => saveSettings({ motion })) }),
       ),

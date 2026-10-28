@@ -1,5 +1,7 @@
 import { call } from '../bridge/bridge';
 import { app, defaultSettings, type Settings } from '../core/store';
+import { useUserIconSet } from '../design/icons';
+import '../design/iconPacks';
 
 const KEY = 'settings';
 
@@ -25,7 +27,8 @@ export async function saveSettings(patch: Partial<Settings>): Promise<void> {
 }
 
 function applyMotion(): void {
-  const m = app.settings.peek().motion;
+  const { motion: m, iconStyle } = app.settings.peek();
+  useUserIconSet(iconStyle === 'theme' ? null : iconStyle);
   if (m === 'system') delete document.documentElement.dataset.motion;
   else document.documentElement.dataset.motion = m;
 }

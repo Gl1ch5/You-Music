@@ -47,6 +47,7 @@ export const graphiteIcons: IconSet = {
   settings: '<path d="M10.4 3.6a1.6 1.6 0 0 1 3.2 0l.1.9a1.6 1.6 0 0 0 2.3 1.2l.8-.4a1.6 1.6 0 0 1 2.2 2.2l-.4.8a1.6 1.6 0 0 0 1.2 2.3l.9.1a1.6 1.6 0 0 1 0 3.2l-.9.1a1.6 1.6 0 0 0-1.2 2.3l.4.8a1.6 1.6 0 0 1-2.2 2.2l-.8-.4a1.6 1.6 0 0 0-2.3 1.2l-.1.9a1.6 1.6 0 0 1-3.2 0l-.1-.9a1.6 1.6 0 0 0-2.3-1.2l-.8.4a1.6 1.6 0 0 1-2.2-2.2l.4-.8a1.6 1.6 0 0 0-1.2-2.3l-.9-.1a1.6 1.6 0 0 1 0-3.2l.9-.1a1.6 1.6 0 0 0 1.2-2.3l-.4-.8a1.6 1.6 0 0 1 2.2-2.2l.8.4a1.6 1.6 0 0 0 2.3-1.2z"/><circle cx="12" cy="12" r="3"/>',
   tune: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   'app-icon': '<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M10.5 9.2v5.6l4.4-2.8z" stroke-linejoin="round"/>',
+  grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="3.25"/>',
   trash: '<path d="M5 7h14M10 7V5h4v2"/><path d="m7 7 .8 12a1.5 1.5 0 0 0 1.5 1.4h5.4a1.5 1.5 0 0 0 1.5-1.4L17 7"/>',
   share: '<path d="M12 15V4"/><path d="m8 8 4-4 4 4"/><path d="M6 12v6.5A1.5 1.5 0 0 0 7.5 20h9a1.5 1.5 0 0 0 1.5-1.5V12"/>',
   edit: '<path d="M5 19h4L19 9l-4-4L5 15z"/><path d="m13.5 6.5 4 4"/>',
@@ -76,6 +77,8 @@ export const graphiteIcons: IconSet = {
 const sets = new Map<string, IconSet>([['graphite', graphiteIcons]]);
 const overrides: Record<string, string> = {};
 let activeSet = 'graphite';
+/** The user's pick in Settings → «Значки»; wins over the theme's set. */
+let userSet: string | null = null;
 
 export function registerIconSet(name: string, set: IconSet): void {
   sets.set(name, set);
@@ -90,6 +93,12 @@ export function useIconSet(name: string): void {
   render();
 }
 
+/** Sets the user's icon pack; `null` follows the theme. */
+export function useUserIconSet(name: string | null): void {
+  userSet = name && sets.has(name) ? name : null;
+  render();
+}
+
 /** Overrides single glyphs on top of the active set; pass `null` to restore. */
 export function overrideIcons(map: Record<string, string | null>): void {
   for (const [k, v] of Object.entries(map)) {
@@ -100,7 +109,7 @@ export function overrideIcons(map: Record<string, string | null>): void {
 }
 
 function render(): void {
-  const base = { ...graphiteIcons, ...sets.get(activeSet), ...overrides };
+  const base = { ...graphiteIcons, ...sets.get(userSet ?? activeSet), ...overrides };
   let sprite = document.getElementById('icon-sprite');
   if (!sprite) {
     sprite = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as unknown as HTMLElement;

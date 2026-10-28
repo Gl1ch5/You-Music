@@ -11,6 +11,8 @@ export interface Settings {
   cacheLimitMb: number;
   themeId: string;
   motion: 'system' | 'reduced' | 'full';
+  /** Icon pack: 'theme' follows the theme, otherwise an id from design/iconPacks. */
+  iconStyle: string;
   waveMode: 'mix' | 'familiar' | 'discover';
   /** Fast: fewer lookups and the quick model; deep: more candidates checked and the stronger model. */
   recoDepth: 'fast' | 'deep';
@@ -33,6 +35,7 @@ export const defaultSettings: Settings = {
   cacheLimitMb: 2048,
   themeId: 'graphite',
   motion: 'system',
+  iconStyle: 'theme',
   waveMode: 'mix',
   recoDepth: 'fast',
   recoFilters: [],
