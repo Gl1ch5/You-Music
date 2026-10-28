@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">You Music</string>
+    <string name="webview_unsupported">Обновите Android System WebView, чтобы запустить приложение.</string>
+    <string name="download_channel">Загрузки</string>
+</resources>

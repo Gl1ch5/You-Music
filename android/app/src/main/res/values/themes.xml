@@ -1,0 +1,13 @@
+<resources>
+    <color name="graphite_bg">#161719</color>
+    <color name="graphite_accent">#E6E2DA</color>
+
+    <style name="Theme.YouMusic" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/graphite_bg</item>
+        <item name="android:colorBackground">@color/graphite_bg</item>
+        <item name="android:colorAccent">@color/graphite_accent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

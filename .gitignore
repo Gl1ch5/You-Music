@@ -1,0 +1,21 @@
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.kotlin/
+*.iml
+.idea/
+*.keystore
+*.jks
+
+# Web UI build output is generated into the app assets by `npm run build`
+android/app/src/main/assets/ui/
+web/node_modules/
+web/dist/
+web/coverage/
+
+# Misc
+.DS_Store
+*.log
+dist-mods/
