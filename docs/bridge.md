@@ -43,6 +43,7 @@
 | `haptic` | `{kind: light\|medium\|confirm}` | — |
 | `share`, `openUrl` | `{text}` | — (`openUrl` — только https) |
 | `moveToBack`, `setSystemBars` | — / `{light}` | — |
+| `appIconGet` / `appIconSet` | — / `{id}` | id иконки лаунчера (`classic`, `01`…`20`); смена включает нужный `activity-alias` |
 | `pickTextFile`, `saveTextFile` | `{mime}` / `{name, text, mime}` | `{name, text}\|null` / `boolean` |
 | **Плеер** | | |
 | `play` | `{queue: Track[], index, positionMs?}` | — |

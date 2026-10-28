@@ -3,13 +3,12 @@ import { call } from '../bridge/bridge';
 import type { Download } from '../bridge/contract';
 import { formatBytes, h, replaceChildren, tracksLabel } from '../core/dom';
 import { app } from '../core/store';
-import { refreshLibrary, removeDownload } from '../services/library';
+import { downloadFavorites, downloadLikes, refreshLibrary, removeDownload } from '../services/library';
 import { appBar, button, emptyState, trackRow, watchScroll } from '../ui/components';
 import { actionSheet, confirmSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
 import { trackList } from '../ui/trackList';
 import { trackHeader } from '../ui/trackMenu';
-import { offlineButtons } from './collection';
 
 function statusText(d: Download): string {
   if (d.status === 'queued') return 'В очереди';
@@ -122,3 +121,13 @@ defineRoute('local', ({ scope }) => {
   );
   return screen;
 });
+
+/** "Download likes" / "Download favourites (likes + playlists)". */
+function offlineButtons(): HTMLElement {
+  return h(
+    'div.button-row',
+    null,
+    button('Скачать лайки', () => void downloadLikes(), { icon: 'download' }),
+    button('Скачать избранное', () => void downloadFavorites(), { icon: 'download' }),
+  );
+}

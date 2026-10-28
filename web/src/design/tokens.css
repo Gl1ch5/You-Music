@@ -78,6 +78,7 @@
   --dyn-dim: 0.72;
   --glow: #5a5f66;
   --shadow-player: 0 -12px 48px rgb(0 0 0 / 0.28);
+  --shadow-mini: 0 6px 20px rgb(0 0 0 / 0.32), 0 1px 3px rgb(0 0 0 / 0.2);
 
   /* Safe areas (from native insets) */
   --safe-top: 0px;

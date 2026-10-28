@@ -424,6 +424,15 @@
   margin-top: var(--s-1);
 }
 
+.card-title.clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 .card-sub {
   font-size: var(--fs-small);
   line-height: var(--lh-small);
@@ -670,7 +679,7 @@
 /* ───────── Progress ───────── */
 .progress {
   position: relative;
-  height: 28px;
+  height: 40px;
   display: flex;
   align-items: center;
   touch-action: none;
@@ -700,22 +709,20 @@
   position: absolute;
   left: 0;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
   border-radius: 50%;
   background: var(--accent);
-  opacity: 0;
-  transform: scale(0.4);
-  transition:
-    opacity var(--t-base) var(--ease),
-    transform var(--t-base) var(--ease);
+  /* `scale`, not `transform`: the position is an inline translateX. Always visible so it is easy to grab. */
+  scale: 0.75;
+  transition: scale var(--t-base) var(--ease);
   pointer-events: none;
 }
 
 .progress-tip {
   position: absolute;
-  bottom: 28px;
+  bottom: 36px;
   left: 0;
   padding: 2px var(--s-1);
   border-radius: var(--s-1);
@@ -733,8 +740,7 @@
 }
 
 .progress.active .progress-thumb {
-  opacity: 1;
-  transform: scale(1);
+  scale: 1.35;
 }
 
 .progress.active .progress-tip {
@@ -744,7 +750,7 @@
 .times {
   display: flex;
   justify-content: space-between;
-  margin-top: calc(var(--s-1) * -1);
+  margin-top: calc(var(--s-2) * -1);
   font-size: var(--fs-small);
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
@@ -759,8 +765,10 @@
   z-index: 19;
   height: var(--mini-h);
   border-radius: var(--r-mini);
-  background: var(--surface);
+  /* A step lighter than cards plus a soft shadow: the mini player floats above the list, it is not part of it. */
+  background: var(--surface-2);
   border: 1px solid var(--line);
+  box-shadow: var(--shadow-mini);
   display: flex;
   align-items: center;
   gap: var(--s-3);
@@ -832,12 +840,11 @@
 
 .mini-line {
   position: absolute;
-  left: var(--s-2);
-  right: var(--s-2);
+  left: 0;
+  right: 0;
   bottom: 0;
-  height: var(--progress);
-  background: var(--line);
-  border-radius: var(--r-pill);
+  height: calc(var(--progress) + 1px);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
   overflow: hidden;
 }
 
@@ -980,6 +987,12 @@
 
 .player-body > :not(.player-art) {
   flex-shrink: 0;
+}
+
+/* Keep the seek bar clear of the screen edges, where Android's back gesture starts. */
+.player-body > .progress,
+.player-body > .times {
+  margin-inline: var(--s-3);
 }
 
 .player-actions {
@@ -1379,7 +1392,11 @@ input[type='color']::-webkit-color-swatch {
   transition: transform var(--t-press) var(--ease);
 }
 
-.stream-row:active {
+.stream-row .filter-pill {
+  background: var(--surface-2);
+}
+
+.stream-row:active:not(:has(.filter-pill:active)) {
   transform: scale(0.98);
 }
 
@@ -1581,6 +1598,22 @@ input[type='color']::-webkit-color-swatch {
   text-underline-offset: 3px;
 }
 
+.text-btn {
+  background: none;
+  border: 0;
+  min-height: var(--hit);
+  padding: 0 var(--s-1);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  transition: opacity var(--t-press) var(--ease);
+}
+
+.text-btn:active {
+  opacity: 0.6;
+}
+
 /* ───────── Liquid Glass theme ─────────
    The one place backdrop-filter is allowed (AGENTS.md rule 4): only the bars and sheets, which are few and small. */
 .glass .screen {
@@ -1599,6 +1632,10 @@ input[type='color']::-webkit-color-swatch {
   -webkit-backdrop-filter: blur(22px) saturate(180%);
   backdrop-filter: blur(22px) saturate(180%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+
+.glass .mini {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), var(--shadow-mini);
 }
 
 .glass .card,
@@ -1757,3 +1794,12 @@ input[type='color']::-webkit-color-swatch {
   gap: var(--s-1);
   margin-top: var(--s-3);
 }
+
+/* App icon picker */
+.icon-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); gap:var(--s-4); padding:var(--s-4) var(--gutter); }
+.icon-pick { position:relative; aspect-ratio:1; padding:0; border:0; background:none; border-radius:var(--r-card); transition:transform var(--t-press) var(--ease); }
+.icon-pick:active { transform:scale(0.94); }
+.icon-pick img { width:100%; height:100%; border-radius:var(--r-card); display:block; }
+.icon-pick::after { content:''; position:absolute; inset:calc(var(--s-1) * -1); border:2px solid var(--accent); border-radius:calc(var(--r-card) + var(--s-1)); opacity:0; transition:opacity var(--t-base) var(--ease); }
+.icon-pick.active::after { opacity:1; }
+.icon-note { padding:0 var(--gutter) var(--s-6); }

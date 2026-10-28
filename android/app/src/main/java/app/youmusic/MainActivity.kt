@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity(), ActivityHost {
         val graph = YouMusicApp.graph
         val registry = CommandRegistry()
         listOf(
-            SystemModule(applicationContext, graph.kv, graph.network, this),
+            SystemModule(applicationContext, graph.kv, graph.network, this, graph.appIcons),
             PlayerModule(graph.player),
             CatalogModule(graph.youtube, graph.lyrics, graph.artwork, graph.importer, graph.features),
             LibraryModule(graph.library, graph.downloads),

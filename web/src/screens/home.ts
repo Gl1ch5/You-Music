@@ -26,10 +26,10 @@ const modeLabel = (mode: Settings['waveMode']) => MODES.find(([id]) => id === mo
 let recoCache: Track[] | null = null;
 
 export function trackCard(track: Track, onClick: () => void): HTMLElement {
-  return h('div.card', { onclick: onClick, dataset: { trackId: track.id } }, trackCover(track, 'md'), h('div.card-title.ellipsis', null, track.title), h('div.card-sub.ellipsis', null, track.artist));
+  return h('div.card', { onclick: onClick, dataset: { trackId: track.id } }, trackCover(track, 'md'), h('div.card-title.clamp-2', null, track.title), h('div.card-sub.ellipsis', null, track.artist));
 }
 
-/** Small "filter" pill: shows the current mode, opens the list of modes. */
+/** Mode pill inside the stream row: shows the current mode, opens the list of modes. */
 function modeFilter(scope: Scope): HTMLElement {
   const label = h('span');
   const btn = h('button.filter-pill', { attrs: { 'aria-label': 'Режим рекомендаций' }, onclick: () => {
@@ -48,7 +48,7 @@ function modeFilter(scope: Scope): HTMLElement {
         },
       })),
     );
-  } }, icon('filter', 'sm'), label);
+  } }, icon('tune', 'sm'), label);
   scope.effect(() => (label.textContent = modeLabel(app.settings.value.waveMode)));
   return btn;
 }
@@ -77,9 +77,15 @@ function streamRow(scope: Scope): HTMLElement {
       sub.textContent = app.settings.peek().waveMode === 'neuro' ? 'Нейросеть подбирает треки…' : 'Подбираем треки…';
       return;
     }
-    sub.textContent = t && inStream() ? `${t.artist} — ${t.title}` : `${modeLabel(app.settings.value.waveMode)} · бесконечно, под ваш вкус`;
+    sub.textContent = t && inStream() ? `${t.artist} — ${t.title}` : 'Бесконечно, под ваш вкус';
   });
-  return h('div.stream-row', { onclick: (e: MouseEvent) => !(e.target as HTMLElement).closest('button') && btn.click() }, btn, h('div.row-main', null, h('div.row-title', null, 'Слушать поток'), sub));
+  return h(
+    'div.stream-row',
+    { onclick: (e: MouseEvent) => !(e.target as HTMLElement).closest('button') && btn.click() },
+    btn,
+    h('div.row-main', null, h('div.row-title', null, 'Слушать поток'), sub),
+    modeFilter(scope),
+  );
 }
 
 async function loadRecommendations(): Promise<Track[]> {
@@ -122,8 +128,7 @@ function recommendationsSection(scope: Scope): HTMLElement {
     track(app.settings);
     if (app.online.value) reload();
   });
-  const head = h('div.section-head', null, h('h2.h2', { style: { flex: '1' } }, 'Для вас'), modeFilter(scope));
-  return h('section.section.first', null, head, streamRow(scope), body);
+  return h('section.section.first', null, sectionHead('Для вас'), streamRow(scope), body);
 }
 
 let aiCache: AiPick[] | null = null;

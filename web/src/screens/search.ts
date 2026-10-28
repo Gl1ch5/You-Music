@@ -29,6 +29,11 @@ async function readHistory(): Promise<string[]> {
   }
 }
 
+async function removeHistory(q: string): Promise<void> {
+  const list = (await readHistory()).filter((x) => x !== q);
+  await call('kvSet', { key: HISTORY_KEY, value: list.length ? JSON.stringify(list) : null });
+}
+
 async function pushHistory(q: string): Promise<void> {
   const list = [q, ...(await readHistory()).filter((x) => x.toLowerCase() !== q.toLowerCase())].slice(0, 20);
   await call('kvSet', { key: HISTORY_KEY, value: JSON.stringify(list) });
@@ -109,11 +114,27 @@ defineRoute('search', ({ scope }) => {
       body,
       history.length
         ? [
-            h('div.section-head', null, h('h2.h2', { style: { flex: '1' } }, 'Вы искали'), button('Очистить', async () => {
-              await call('kvSet', { key: HISTORY_KEY, value: null });
-              showIdle();
-            }, { cls: 'ghost' })),
-            ...history.map((q) => listItem({ icon: 'clock', title: q, onClick: () => submit(q), trailing: icon('chevron-right', 'sm faint') })),
+            h(
+              'div.section-head',
+              null,
+              h('h2.h2', { style: { flex: '1' } }, 'Вы искали'),
+              h('button.text-btn', { attrs: { type: 'button' }, onclick: async () => {
+                await call('kvSet', { key: HISTORY_KEY, value: null });
+                showIdle();
+              } }, 'Очистить'),
+            ),
+            ...history.map((q) =>
+              listItem({
+                icon: 'clock',
+                title: q,
+                onClick: () => submit(q),
+                trailing: iconButton('close', `Удалить «${q}» из истории`, async (e) => {
+                  e.stopPropagation();
+                  await removeHistory(q);
+                  showIdle();
+                }, 'faint'),
+              }),
+            ),
           ]
         : emptyState('search', 'Что послушаем?', app.online.peek() ? 'Ищите треки, альбомы и исполнителей.' : 'Поиск работает только с сетью.'),
     );

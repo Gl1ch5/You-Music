@@ -111,6 +111,8 @@ setInterval(() => {
   progress();
 }, 500);
 
+let mockIcon = '10';
+
 const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][1] | Promise<Commands[K][1]> } = {
   hello: () => ({ appVersion: '1.0.0-dev', extractorVersion: 'mock', sdkInt: 36, online: true, insets: { top: 24, bottom: 16, left: 0, right: 0 } }),
   // Screenshots skip the first-launch setup unless the page is opened with ?onboarding.
@@ -121,6 +123,10 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
   share: () => undefined,
   openUrl: ({ text }) => void window.open(text, '_blank'),
   moveToBack: () => undefined,
+  appIconGet: () => mockIcon,
+  appIconSet: ({ id }) => {
+    mockIcon = id;
+  },
   setSystemBars: () => undefined,
   pickTextFile: () => null,
   saveTextFile: () => false,

@@ -12,6 +12,7 @@ import app.youmusic.model.HelloDto
 import app.youmusic.model.PickedTextDto
 import app.youmusic.net.NetworkMonitor
 import app.youmusic.system.ActivityHost
+import app.youmusic.system.AppIcons
 import kotlinx.serialization.Serializable
 
 @Serializable data class KeyArgs(val key: String)
@@ -21,6 +22,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class TextArgs(val text: String)
 @Serializable data class LightArgs(val light: Boolean)
 @Serializable data class PickTextArgs(val mime: String = "*/*")
+@Serializable data class IconArgs(val id: String)
 @Serializable data class SaveTextArgs(val name: String, val text: String, val mime: String = "application/json")
 
 /** App info, key/value storage, files and small Activity services (haptics, share, system bars). */
@@ -29,6 +31,7 @@ class SystemModule(
     private val kv: KeyValueStore,
     private val network: NetworkMonitor,
     private val host: ActivityHost,
+    private val icons: AppIcons,
 ) : BridgeModule {
     override fun register(registry: CommandRegistry) = with(registry) {
         command<NoArgs, HelloDto>("hello") {
@@ -42,6 +45,11 @@ class SystemModule(
         command<TextArgs, Unit>("openUrl") { a ->
             if (!a.text.startsWith("https://")) throw BridgeException("bad_request", "Только https-ссылки")
             host.openUrl(a.text)
+        }
+        command<NoArgs, String>("appIconGet") { icons.current() }
+        command<IconArgs, Unit>("appIconSet") { a ->
+            if (a.id !in icons.ids) throw BridgeException("bad_request", "Нет такой иконки")
+            icons.set(a.id)
         }
         command<NoArgs, Unit>("moveToBack") { host.moveToBack() }
         command<NoArgs, String?>("consumeDeepLink") { host.consumeDeepLink() }

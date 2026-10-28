@@ -9,7 +9,7 @@ import { RELEASES_URL } from '../services/playback';
 import { server } from '../services/server';
 import { saveSettings } from '../services/settings';
 import { activeTheme, allThemes, applyTheme, customThemes } from '../theme/engine';
-import { appBar, button, emptyState, listItem, switchControl, watchScroll } from '../ui/components';
+import { appBar, button, chip, emptyState, haptic, listItem, switchControl, watchScroll } from '../ui/components';
 import { actionSheet, confirmSheet } from '../ui/sheet';
 import { toast } from '../ui/toast';
 
@@ -58,6 +58,7 @@ defineRoute('settings', ({ scope }) => {
       group(
         'Оформление',
         listItem({ icon: 'palette', title: 'Тема', sub: theme.name, onClick: () => pickTheme() }),
+        listItem({ icon: 'app-icon', title: 'Иконка приложения', sub: 'Светлые и тёмные варианты', onClick: () => navigate('appIcon') }),
         listItem({ icon: 'edit', title: 'Редактор тем', sub: 'Цвета, скругления, зерно, анимации', onClick: () => navigate('themeEditor', { id: theme.id }) }),
         listItem({ icon: 'sparkle', title: 'Анимации', sub: MOTION[s.motion], onClick: () => choose('Анимации', MOTION, s.motion, (motion) => saveSettings({ motion })) }),
       ),
@@ -156,6 +157,64 @@ function backupMenu(): void {
   ]);
 }
 
+const LIGHT_ICONS = ['01', '02', '03', '05', '06', '07', '08', '11', '13', '14', '17', '20'];
+const DARK_ICONS = ['04', '09', '10', '12', '15', '16', '18', '19'];
+
+defineRoute('appIcon', () => {
+  const screen = h('div.screen');
+  const bar = appBar({ title: 'Иконка приложения', back: goBack });
+  watchScroll(screen, bar);
+  const chips = h('div.chips');
+  const grid = h('div.icon-grid');
+  let current = '';
+  let dark = false;
+
+  const render = () => {
+    replaceChildren(chips, chip('Светлые', !dark, () => ((dark = false), render())), chip('Тёмные', dark, () => ((dark = true), render())));
+    const ids = dark ? DARK_ICONS : LIGHT_ICONS;
+    replaceChildren(
+      grid,
+      ids.map((id) =>
+        h(
+          `button.icon-pick${id === current ? '.active' : ''}`,
+          { 'aria-label': `Иконка ${id}`, onclick: () => pick(id) },
+          h('img', { src: `app-icons/${id}.webp`, alt: '', loading: 'lazy' }),
+        ),
+      ),
+    );
+  };
+
+  const pick = (id: string) => {
+    if (id === current) return;
+    call('appIconSet', { id })
+      .then(() => {
+        current = id;
+        haptic('confirm');
+        render();
+        toast('Иконка изменится через пару секунд. Ярлык на рабочем столе может пропасть — добавьте его заново');
+      })
+      .catch(() => toast('Не удалось сменить иконку'));
+  };
+
+  call('appIconGet')
+    .then((id) => {
+      current = id;
+      dark = DARK_ICONS.includes(id);
+      render();
+    })
+    .catch(() => render());
+  render();
+
+  screen.append(
+    bar,
+    h('div.page-head', null, h('h1.h1', null, 'Иконка')),
+    chips,
+    grid,
+    h('p.small.muted.icon-note', null, 'Значок на рабочем столе и в списке приложений. Тема интерфейса от него не зависит.'),
+  );
+  return screen;
+});
+
 defineRoute('mods', ({ scope }) => {
   const screen = h('div.screen');
   const bar = appBar({ title: 'Моды', back: goBack });
@@ -178,7 +237,7 @@ defineRoute('mods', ({ scope }) => {
                 trailing: switchControl(e.state.enabled, (on) => setModEnabled(e.mod.id, on)),
                 onClick: () =>
                   actionSheet(h('div.h2', null, e.mod.manifest.name), [
-                    ...settings.filter((s) => s.modId === e.mod.id).map((s) => ({ icon: 'settings', label: s.title, run: () => navigate('modPanel', { kind: 'settings', modId: s.modId, id: s.id }) })),
+                    ...settings.filter((s) => s.modId === e.mod.id).map((s) => ({ icon: 'tune', label: s.title, run: () => navigate('modPanel', { kind: 'settings', modId: s.modId, id: s.id }) })),
                     { icon: 'trash', label: 'Удалить мод', danger: true, run: async () => {
                       if (await confirmSheet({ title: `Удалить «${e.mod.manifest.name}»?`, text: 'Настройки мода тоже удалятся.', ok: 'Удалить', danger: true })) removeMod(e.mod.id);
                     } },

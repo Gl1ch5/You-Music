@@ -29,6 +29,7 @@ import app.youmusic.source.LyricsRepository
 import app.youmusic.source.NewPipeHttp
 import app.youmusic.source.StreamResolver
 import app.youmusic.source.YouTubeRepository
+import app.youmusic.system.AppIcons
 import app.youmusic.system.ProgressNotifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +72,7 @@ class AppGraph(app: Application) {
     val playbackDataSource = PlaybackDataSourceFactory(app, mediaCache, resolver, downloads, network)
     val player = PlayerController(app, paths, appScope)
     val progressNotifications = ProgressNotifications(app)
+    val appIcons = AppIcons(app)
 
     init {
         updates.beforeInstall = { backup.saveNow() }

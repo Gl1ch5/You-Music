@@ -305,6 +305,8 @@ export interface Commands {
   share: [{ text: string }, void];
   openUrl: [{ text: string }, void];
   moveToBack: [None, void];
+  appIconGet: [None, string];
+  appIconSet: [{ id: string }, void];
   consumeDeepLink: [None, string | null];
   setSystemBars: [{ light: boolean }, void];
   pickTextFile: [{ mime: string }, { name: string; text: string } | null];
