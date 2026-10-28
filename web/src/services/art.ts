@@ -10,12 +10,16 @@ export function artFor(track: Pick<Track, 'id' | 'artwork' | 'source'>, size: Ar
   const out: string[] = [];
   const local = app.downloads.peek().get(track.id)?.localArt;
   if (local) out.push(local);
-  if (track.artwork) out.push(resize(track.artwork, PX[size]));
+  // A video frame (hqdefault/sddefault are 4:3 with black bars — they show in a square crop): prefer the 16:9 sizes.
+  const videoThumb = !!track.artwork && /i\.ytimg\.com\/vi(?:_webp)?\//.test(track.artwork);
+  if (track.artwork && !videoThumb) out.push(resize(track.artwork, PX[size]));
   if (track.source === 'yt') {
     const id = track.id.slice(3);
-    if (size === 'lg') out.push(`https://i.ytimg.com/vi/${id}/hq720.jpg`);
+    if (size === 'lg') out.push(`https://i.ytimg.com/vi/${id}/maxresdefault.jpg`);
+    if (size !== 'sm') out.push(`https://i.ytimg.com/vi/${id}/hq720.jpg`);
     out.push(`https://i.ytimg.com/vi/${id}/mqdefault.jpg`);
   }
+  if (track.artwork && videoThumb) out.push(track.artwork);
   return [...new Set(out)];
 }
 

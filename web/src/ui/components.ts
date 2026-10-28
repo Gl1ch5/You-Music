@@ -33,6 +33,8 @@ export function setCoverUrls(box: HTMLElement, urls: string[]): void {
   let i = 0;
   const done = () => old.forEach((o) => o.remove());
   img.onload = () => {
+    // YouTube answers a missing size with a 120×90 grey placeholder instead of an error: try the next one.
+    if (img.naturalWidth <= 120 && i + 1 < urls.length && /i\.ytimg\.com/.test(urls[i])) return img.onerror?.(new Event('error'));
     img.classList.add('loaded');
     if (old.length) setTimeout(done, 260);
   };
