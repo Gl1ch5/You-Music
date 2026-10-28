@@ -8,7 +8,7 @@ val releaseKeystore = System.getenv("KEYSTORE_FILE")?.let { file(it) }?.takeIf {
 
 android {
     namespace = "app.youmusic"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.youmusic"
