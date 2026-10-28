@@ -1404,13 +1404,15 @@ input[type='color']::-webkit-color-swatch {
 
 .button-row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--s-2);
   padding: var(--s-2) var(--gutter) 0;
 }
 
 .button-row .btn {
-  flex: 1;
-  min-width: 0;
+  /* Both fit → share the row; otherwise each takes a full row instead of overflowing. */
+  flex: 1 1 auto;
+  white-space: nowrap;
   padding: 0 var(--s-3);
 }
 
