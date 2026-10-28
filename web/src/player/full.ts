@@ -87,16 +87,23 @@ export function mountFullPlayer(): HTMLElement {
     replaceChildren(pills, repeatBtn, lyricsBtn, shuffleBtn, ...mods);
   });
   const waveTitle = h('div.wave-banner-title.ellipsis');
+  const waveLabel = h('div.wave-banner-label');
+  const waveIcon = h('span.wave-banner-icon');
   const wave = h('button.wave-banner', { onclick: () => {
     const t = currentTrack.peek();
     if (t) void playTrackWave(t);
-  } }, h('div.wave-banner-label', null, 'Волна по треку'), h('div.wave-banner-row', null, icon('play', 'sm'), waveTitle));
+  } }, waveLabel, h('div.wave-banner-row', null, waveIcon, waveTitle));
   scope.effect(() => {
     const t = currentTrack.value;
     const ctx = player.context.value;
     waveTitle.textContent = t ? normalizeTrack(t).title : '';
-    // Hidden for own files and while this very wave plays.
-    wave.hidden = !t || t.source !== 'yt' || (ctx?.kind === 'wave' && ctx.title === `Волна по «${t.title}»`);
+    // While this very wave plays the banner stays in place (no layout jump), only its state changes.
+    const active = !!t && ctx?.kind === 'wave' && ctx.title === `Волна по «${t.title}»`;
+    wave.classList.toggle('on', active);
+    wave.disabled = active;
+    waveLabel.textContent = active ? 'Играет волна по треку' : 'Волна по треку';
+    waveIcon.replaceChildren(icon(active ? 'wave' : 'play', 'sm'));
+    wave.hidden = !t || t.source !== 'yt';
   });
 
   const head = h('div.player-head', null, iconButton('chevron-down', 'Свернуть', () => closePlayer()), context, iconButton('queue', 'Очередь', openQueue));

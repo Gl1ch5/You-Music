@@ -1102,6 +1102,22 @@
   transform: scale(0.98);
 }
 
+.wave-banner.on {
+  cursor: default;
+}
+
+.wave-banner.on:active {
+  transform: none;
+}
+
+.wave-banner.on .wave-banner-row {
+  opacity: 0.7;
+}
+
+.wave-banner-icon {
+  display: inline-flex;
+}
+
 .wave-banner-label {
   font-size: var(--fs-small);
   color: var(--text-2);
