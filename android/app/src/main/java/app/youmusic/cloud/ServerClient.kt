@@ -126,7 +126,7 @@ class ServerClient(
         val body = BridgeJson.encodeToString(Credentials.serializer(), Credentials(login.trim(), password))
         val res = request(if (register) "/api/register" else "/api/login", "POST", body, AuthResponse.serializer(), auth = false)
         token = res.token
-        setUser(res.user)
+        saveUser(res.user)
         prefs.edit { putLong(SYNCED_AT, 0); putLong(REMOTE_AT, 0) }
         runCatching { sync() }
         return status()
@@ -135,7 +135,7 @@ class ServerClient(
     suspend fun logout(): ServerStatusDto {
         runCatching { request("/api/logout", "POST", "{}", JsonObject.serializer()) }
         token = null
-        setUser(null)
+        saveUser(null)
         prefs.edit { remove(SYNCED_AT); remove(REMOTE_AT) }
         syncError = null
         emit()
@@ -145,7 +145,7 @@ class ServerClient(
     /** Refreshes the account (AI quota left, proxy credentials). */
     suspend fun refresh(): ServerStatusDto {
         if (!signedIn) return status()
-        runCatching { setUser(request("/api/me", "GET", null, ServerUserDto.serializer())) }
+        runCatching { saveUser(request("/api/me", "GET", null, ServerUserDto.serializer())) }
             .onFailure { if (it is BridgeException && it.code == "unauthorized") logout() }
         return status()
     }
@@ -195,7 +195,7 @@ class ServerClient(
         val text = requestBlocking("/api/ai/chat", "POST", BridgeJson.encodeToString(ChatBody.serializer(), ChatBody(messages, temperature)), timeoutSec = 100)
         val obj = BridgeJson.parseToJsonElement(text).jsonObject
         obj["left"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.let { left ->
-            user?.let { setUser(it.copy(ai = it.ai.copy(left = left))) }
+            user?.let { saveUser(it.copy(ai = it.ai.copy(left = left))) }
         }
         return obj["content"]?.jsonPrimitive?.contentOrNull ?: throw BridgeException("ai_error", "Пустой ответ нейросети")
     }
@@ -211,7 +211,7 @@ class ServerClient(
         }
     }
 
-    private fun setUser(u: ServerUserDto?) {
+    private fun saveUser(u: ServerUserDto?) {
         user = u
         proxies.setServerProxy(u?.proxy?.toProxy())
         emit()
