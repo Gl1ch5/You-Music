@@ -1,0 +1,101 @@
+/*
+ * Graphite design tokens. These are the defaults; the theme engine (src/theme/engine.ts) overwrites them at runtime
+ * from a theme JSON. Components must only use these variables — never raw colours or sizes.
+ */
+:root {
+  /* Palette */
+  --bg: #161719;
+  --surface: #1e1f22;
+  --surface-2: #26282b;
+  --line: #2f3135;
+  --text: #eceae6;
+  --text-2: #9b9ca0;
+  --text-3: #64666b;
+  --accent: #e6e2da;
+  --on-accent: #161719;
+  --like: #e6e2da;
+  --danger: #d9726a;
+  --scrim: rgb(0 0 0 / 0.55);
+  --cover-edge: rgb(255 255 255 / 0.06);
+
+  /* Shape */
+  --r-cover: 12px;
+  --r-card: 16px;
+  --r-mini: 14px;
+  --r-pill: 999px;
+  --r-avatar: 50%;
+
+  /* 8px grid */
+  --u: 8px;
+  --s-1: calc(var(--u) * 0.5);
+  --s-2: var(--u);
+  --s-3: calc(var(--u) * 1.5);
+  --s-4: calc(var(--u) * 2);
+  --s-5: calc(var(--u) * 3);
+  --s-6: calc(var(--u) * 4);
+  --s-8: calc(var(--u) * 6);
+  --gutter: calc(var(--u) * 2.5);
+
+  /* Type */
+  --font: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --fs-title: 28px;
+  --lh-title: 32px;
+  --fs-section: 20px;
+  --lh-section: 24px;
+  --fs-track: 15px;
+  --lh-track: 20px;
+  --fs-body: 15px;
+  --fs-small: 13px;
+  --lh-small: 18px;
+  --fs-tiny: 11px;
+  --tracking-title: -0.02em;
+
+  /* Sizes */
+  --icon: 24px;
+  --icon-stroke: 1.5;
+  --hit: 44px;
+  --row-h: 64px;
+  --cover-row: 48px;
+  --cover-mini: 44px;
+  --cover-card: 144px;
+  --nav-h: 64px;
+  --mini-h: 64px;
+  --appbar-h: 56px;
+  --progress: 2px;
+  --progress-active: 6px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-press: var(--motion-press, 120ms);
+  --t-base: var(--motion-base, 220ms);
+  --t-open: var(--motion-open, 320ms);
+  --shift: 16px;
+
+  /* Material */
+  --grain: 0.025;
+  --dyn-sat: 0.5;
+  --dyn-dim: 0.72;
+  --glow: #5a5f66;
+  --shadow-player: 0 -12px 48px rgb(0 0 0 / 0.28);
+
+  /* Safe areas (from native insets) */
+  --safe-top: 0px;
+  --safe-bottom: 0px;
+}
+
+:root[data-motion='reduced'] {
+  --t-press: 0ms;
+  --t-base: 0ms;
+  --t-open: 0ms;
+  --shift: 0px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) {
+    --t-press: 0ms;
+    --t-base: 0ms;
+    --t-open: 0ms;
+    --shift: 0px;
+  }
+}
