@@ -1,5 +1,5 @@
 import type { Transport } from './bridge';
-import type { Commands, Download, HistoryEntry, InstalledMod, Like, Playlist, Track } from './contract';
+import type { Commands, Download, HistoryEntry, InstalledMod, Like, Playlist, Proxy, Track, UpdateState } from './contract';
 
 /**
  * In-memory stand-in for the Android layer, used by `npm run dev` in a desktop browser and by the screenshot
@@ -60,6 +60,15 @@ let playlists: Playlist[] = [
 const playlistTracks = new Map<number, Track[]>([[1, tracks.slice(5, 11)], [2, tracks.slice(3, 6)], [3, tracks.slice(10, 18)]]);
 const downloads = new Map<string, Download>(tracks.slice(0, 7).map((t) => [t.id, { trackId: t.id, track: t, status: 'done', progress: 1, bytes: 4_200_000, quality: 'high', localArt: null }]));
 const kv = new Map<string, string>();
+const mockProxies: Proxy[] = [{ id: 'p1', type: 'socks5', host: '203.0.113.7', port: 1080, user: 'demo', pingMs: 81 }];
+const mockUpdate: UpdateState = {
+  currentVersion: '1.0.0-dev',
+  currentCode: 1,
+  latest: { versionCode: 2, versionName: '1.0.42-nightly', channel: 'nightly', apk: '', notes: 'Плавные переходы, прокси, нейро-рекомендации' },
+  status: 'ready',
+  progress: 1,
+  checkedAt: Date.now(),
+};
 
 /* Simulated player */
 let queue: Track[] = [];
@@ -273,6 +282,30 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
   localRemove: () => undefined,
 
   // Tests can inject installed mods (see scripts/mods-check.mjs).
+  consumeDeepLink: () => null,
+  proxyState: () => ({ proxies: mockProxies, activeId: mockProxies[0]?.id ?? null, enabled: true, vpnActive: false, inUse: true }),
+  proxyAdd: ({ link }) => {
+    const p = { id: String(Date.now()), type: 'socks5' as const, host: link.replace(/^.*@|:\d+$/g, ''), port: 1080, pingMs: null };
+    mockProxies.push(p);
+    return p;
+  },
+  proxyRemove: ({ id }) => void mockProxies.splice(mockProxies.findIndex((p) => p.id === id), 1),
+  proxySelect: () => undefined,
+  proxySetEnabled: () => undefined,
+  proxyPing: ({ id }) => {
+    const p = mockProxies.find((x) => x.id === id);
+    if (p) p.pingMs = 42;
+    return 42;
+  },
+  proxyShareLink: ({ id }) => `youmusic://socks?server=${mockProxies.find((p) => p.id === id)?.host}&port=1080`,
+  updateState: () => mockUpdate,
+  updateCheck: () => mockUpdate,
+  updateDownload: () => mockUpdate,
+  updateInstall: () => undefined,
+  updateSchedule: () => undefined,
+  aiConfig: () => ({ baseUrl: 'https://api.example.com/v1', model: 'demo-model', enabled: true, hasKey: true }),
+  aiConfigure: () => ({ baseUrl: 'https://api.example.com/v1', model: 'demo-model', enabled: true, hasKey: true }),
+  aiChat: () => JSON.stringify(tracks.slice(14, 20).map((t) => ({ artist: t.artist, title: t.title, reason: 'похоже на ваши лайки' }))),
   modsList: () => (window as unknown as { __mockMods?: InstalledMod[] }).__mockMods ?? [],
   modStage: () => null,
   modInstall: () => {

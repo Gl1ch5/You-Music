@@ -99,6 +99,8 @@ class YouTubeRepository {
         return info
     }
 
+    fun clearStreamInfo() = synchronized(streamInfoCache) { streamInfoCache.evictAll() }
+
     fun trackDetails(videoId: String): TrackDetailsDto {
         val info = streamInfo(videoId)
         val track = TrackDto(

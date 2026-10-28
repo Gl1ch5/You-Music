@@ -2,4 +2,6 @@
     <string name="app_name">You Music</string>
     <string name="webview_unsupported">Обновите Android System WebView, чтобы запустить приложение.</string>
     <string name="download_channel">Загрузки</string>
+    <string name="updates_channel">Обновления</string>
+    <string name="update_ready_title">Доступно обновление You Music</string>
 </resources>

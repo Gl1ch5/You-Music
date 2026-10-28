@@ -50,8 +50,12 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           export KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
           VERSION="${GITHUB_REF_NAME#v}"
-          ./gradlew :app:assembleRelease -PversionCode=${{ github.run_number }} -PversionName="$VERSION"
+          VERSION_CODE=$(( $(date +%s) / 60 ))
+          ./gradlew :app:assembleRelease -PversionCode=$VERSION_CODE -PversionName="$VERSION"
           mkdir -p ../dist && cp app/build/outputs/apk/release/app-release.apk "../dist/you-music-$VERSION.apk"
+          jq -n --argjson code "$VERSION_CODE" --arg name "$VERSION" --arg sha "$GITHUB_SHA" \
+            --arg apk "https://github.com/${{ github.repository }}/releases/download/$GITHUB_REF_NAME/you-music-$VERSION.apk" \
+            '{versionCode: $code, versionName: $name, channel: "stable", apk: $apk, sha: $sha, publishedAt: (now | todate)}' > ../dist/version.json
 
       - name: Publish
         env:

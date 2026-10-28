@@ -12,6 +12,7 @@ import './screens/offline';
 import './screens/settings';
 import './screens/themeEditor';
 import './screens/import';
+import './screens/network';
 
 import { goBack } from './app/router';
 import { mountShell } from './app/shell';
@@ -25,6 +26,9 @@ import { uiBus } from './services/events';
 import { initLibrary, refreshLibrary } from './services/library';
 import { initPlayback, restorePlayer } from './services/playback';
 import { loadSettings } from './services/settings';
+import { refreshAiConfig } from './services/ai';
+import { initDeepLinks } from './services/deeplink';
+import { initUpdates } from './services/updates';
 import { loadThemes } from './theme/engine';
 import { handleBack, onBack } from './ui/back';
 import { initRowMarkers } from './ui/components';
@@ -64,7 +68,9 @@ async function boot(): Promise<void> {
   });
   window.addEventListener('keydown', (e) => e.key === 'Escape' && (handleBack() || closePlayer()));
 
-  await Promise.all([refreshLibrary().catch(console.error), restorePlayer()]);
+  await Promise.all([refreshLibrary().catch(console.error), restorePlayer(), refreshAiConfig()]);
+  initUpdates();
+  initDeepLinks();
   app.ready.value = true;
   document.documentElement.classList.add('ready');
 

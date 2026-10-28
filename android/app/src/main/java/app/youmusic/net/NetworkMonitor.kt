@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class NetworkStateDto(val online: Boolean, val unmetered: Boolean)
+data class NetworkStateDto(val online: Boolean, val unmetered: Boolean, val vpn: Boolean)
 
 class NetworkMonitor(context: Context) {
     private val cm = context.getSystemService(ConnectivityManager::class.java)
@@ -18,6 +18,14 @@ class NetworkMonitor(context: Context) {
     val state: StateFlow<NetworkStateDto> = _state
 
     val online: Boolean get() = _state.value.online
+    val vpn: Boolean get() = _state.value.vpn
+
+    private val listeners = mutableListOf<(old: NetworkStateDto, new: NetworkStateDto) -> Unit>()
+
+    /** Called on every change (the public IP may have changed: VPN toggled, Wi-Fi ↔ mobile). */
+    fun onChange(listener: (old: NetworkStateDto, new: NetworkStateDto) -> Unit) {
+        synchronized(listeners) { listeners += listener }
+    }
 
     init {
         cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
@@ -29,9 +37,11 @@ class NetworkMonitor(context: Context) {
 
     private fun update() {
         val next = current()
-        if (next != _state.value) {
+        val old = _state.value
+        if (next != old) {
             _state.value = next
             EventBus.emit("network", next)
+            synchronized(listeners) { listeners.toList() }.forEach { it(old, next) }
         }
     }
 
@@ -40,6 +50,7 @@ class NetworkMonitor(context: Context) {
         val online = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true ||
             caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
         val unmetered = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
-        return NetworkStateDto(online, unmetered)
+        val vpn = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        return NetworkStateDto(online, unmetered, vpn)
     }
 }

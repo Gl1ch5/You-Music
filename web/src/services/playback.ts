@@ -4,6 +4,7 @@ import { app, currentTrack, isPlayable, livePosition, player, type PlayContext }
 import { Wave, type RecoSource } from '../logic/recommend';
 import { hooks, runHooks } from '../mods/registry';
 import { toast } from '../ui/toast';
+import { aiSuggest } from './ai';
 import { related } from './catalog';
 import { uiBus } from './events';
 
@@ -21,6 +22,15 @@ export const recoSource: RecoSource = {
 };
 
 let wave: Wave | null = null;
+
+/** Wave for the current mode; "neuro" mixes AI suggestions into the related-video candidates. */
+export function createWave(): Wave {
+  const mode = app.settings.peek().waveMode;
+  if (mode === 'neuro' && app.aiEnabled.peek()) {
+    return new Wave({ ...recoSource, extra: async () => (await aiSuggest(recoSource, 12)).map((p) => p.track) }, 'mix');
+  }
+  return new Wave(recoSource, mode === 'neuro' ? 'mix' : mode);
+}
 let extending = false;
 
 export async function playTracks(tracks: Track[], index: number, context: PlayContext): Promise<void> {
@@ -45,7 +55,7 @@ export async function playWave(): Promise<void> {
     wave = null;
     return playTracks(shuffle(offline), 0, { kind: 'wave', title: 'Волна · офлайн' });
   }
-  wave = new Wave(recoSource, app.settings.peek().waveMode);
+  wave = createWave();
   let first = await wave.next(8).catch(() => [] as Track[]);
   first = await runHooks(hooks.recommendations, first, { source: 'wave' });
   if (!first.length) {

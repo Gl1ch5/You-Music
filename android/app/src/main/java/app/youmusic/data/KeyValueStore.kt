@@ -32,5 +32,9 @@ data class AppSettings(
     val streamQuality: String = "high",
     val downloadQuality: String = "high",
     val wifiOnlyDownloads: Boolean = false,
-    val cacheLimitMb: Int = 512,
+    val cacheLimitMb: Int = 2048,
+    val autoUpdate: Boolean = true,
+    val autoDownloadUpdates: Boolean = true,
+    val updateChannel: String = "nightly",
+    val crossfadeSec: Int = 4,
 )

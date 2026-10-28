@@ -14,4 +14,5 @@ interface ActivityHost {
     fun moveToBack()
     fun setLightSystemBars(light: Boolean)
     fun insets(): InsetsDto
+    fun consumeDeepLink(): String?
 }

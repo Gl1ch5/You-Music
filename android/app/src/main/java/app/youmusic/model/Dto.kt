@@ -140,6 +140,9 @@ data class InstalledModDto(val id: String, val manifest: JsonObject, val baseUrl
 data class PickedTextDto(val name: String, val text: String)
 
 @Serializable
+data class DeepLinkDto(val url: String)
+
+@Serializable
 data class InsetsDto(val top: Float, val bottom: Float, val left: Float, val right: Float)
 
 @Serializable

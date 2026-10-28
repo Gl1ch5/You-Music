@@ -44,6 +44,7 @@ class SystemModule(
             host.openUrl(a.text)
         }
         command<NoArgs, Unit>("moveToBack") { host.moveToBack() }
+        command<NoArgs, String?>("consumeDeepLink") { host.consumeDeepLink() }
         command<LightArgs, Unit>("setSystemBars") { host.setLightSystemBars(it.light) }
         command<PickTextArgs, PickedTextDto?>("pickTextFile") { a ->
             val uri = host.pickDocuments(arrayOf(a.mime), multiple = false).firstOrNull() ?: return@command null

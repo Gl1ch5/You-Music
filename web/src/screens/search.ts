@@ -6,7 +6,7 @@ import { app } from '../core/store';
 import { resize } from '../services/art';
 import { search, suggestions } from '../services/catalog';
 import { playTracks, RELEASES_URL } from '../services/playback';
-import { button, chip, cover, emptyState, iconButton, listItem, skeletonRows, trackRow } from '../ui/components';
+import { button, chip, cover, emptyState, iconButton, listItem, sectionHead, skeletonRows, trackRow } from '../ui/components';
 import { openTrackMenu } from '../ui/trackMenu';
 
 const FILTERS: [SearchFilter, string][] = [
@@ -19,6 +19,7 @@ const FILTERS: [SearchFilter, string][] = [
 ];
 
 const HISTORY_KEY = 'search.history';
+const TOP_TRACKS = 6;
 
 async function readHistory(): Promise<string[]> {
   try {
@@ -41,6 +42,16 @@ export function collectionRow(c: Collection): HTMLElement {
     cover(c.artwork ? [resize(c.artwork, 120)] : [], '', c.kind === 'album' ? 'disc' : 'playlist'),
     h('div.row-main', null, h('div.row-title.ellipsis', null, c.title), h('div.row-sub.ellipsis', null, sub)),
     icon('chevron-right', 'faint'),
+  );
+}
+
+function collectionCard(c: Collection): HTMLElement {
+  return h(
+    'div.card',
+    { onclick: () => navigate('remote', { url: c.url, title: c.title }) },
+    cover(c.artwork ? [resize(c.artwork, 300)] : [], '', c.kind === 'album' ? 'disc' : 'playlist'),
+    h('div.card-title.ellipsis', null, c.title),
+    h('div.card-sub.ellipsis', null, [c.kind === 'album' ? 'Альбом' : 'Плейлист', c.subtitle].filter(Boolean).join(' · ')),
   );
 }
 
@@ -128,6 +139,23 @@ defineRoute('search', ({ scope }) => {
     }
   };
 
+  const loadShelves = (q: string, id: number, target: HTMLElement) => {
+    for (const [kind, title] of [['playlists', 'Плейлисты'], ['albums', 'Альбомы']] as const) {
+      const shelf = h('section.section');
+      target.appendChild(shelf);
+      search(q, kind)
+        .then((res) => {
+          const items = res.items.filter((i) => i.collection).slice(0, 12);
+          if (id !== requestId || !items.length) return;
+          replaceChildren(shelf, sectionHead(title, () => {
+            filter = kind;
+            runSearch(q);
+          }), h('div.scroll-x', null, items.map((i) => collectionCard(i.collection!))));
+        })
+        .catch(() => undefined);
+    }
+  };
+
   const runSearch = async (q: string) => {
     query = q;
     const id = ++requestId;
@@ -139,6 +167,18 @@ defineRoute('search', ({ scope }) => {
       if (id !== requestId) return;
       nextPage = res.nextPage;
       resultList = h('div.list');
+      if (filter === 'all') {
+        // Tracks first, then playlist and album rows, then the rest of the tracks (infinite scroll continues there).
+        const trackItems = res.items.filter((i) => i.track);
+        const artists = res.items.filter((i) => i.artist);
+        const head = h('div.list');
+        renderItems(trackItems.slice(0, TOP_TRACKS), head);
+        const shelves = h('div');
+        renderItems(trackItems.slice(TOP_TRACKS), resultList);
+        replaceChildren(body, res.items.length ? [head, shelves, artists.length ? h('div.list', null, artists.map((a) => artistRow(a.artist!))) : null, trackItems.length > TOP_TRACKS ? sectionHead('Ещё треки') : null, resultList] : emptyState('search', 'Ничего не нашлось', 'Попробуйте другой запрос или фильтр.'));
+        loadShelves(q, id, shelves);
+        return;
+      }
       renderItems(res.items, resultList);
       replaceChildren(body, res.items.length ? resultList : emptyState('search', 'Ничего не нашлось', 'Попробуйте другой запрос или фильтр.'));
     } catch (e) {

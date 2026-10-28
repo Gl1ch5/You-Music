@@ -43,6 +43,9 @@ class StreamResolver(private val youtube: YouTubeRepository, private val kv: Key
         ).also { cache[key] = it }
     }
 
+    /** Stream URLs are bound to the public IP; drop them all when the route changes (VPN, proxy, network). */
+    fun clearAll() = cache.clear()
+
     fun invalidate(videoId: String) {
         cache.keys.removeAll { it.startsWith("$videoId|") }
     }

@@ -1,11 +1,11 @@
 import { defineRoute, goBack, navigate } from '../app/router';
-import { BridgeError, call } from '../bridge/bridge';
-import type { ImportedList, ImportedTrack, Track } from '../bridge/contract';
+import { call } from '../bridge/bridge';
+import type { ImportedList, Track } from '../bridge/contract';
 import { h, replaceChildren, tracksLabel } from '../core/dom';
 import type { Scope } from '../core/signal';
 import { app } from '../core/store';
-import { bestMatch, parseTrackList } from '../logic/match';
-import { search } from '../services/catalog';
+import { parseTrackList } from '../logic/match';
+import { findTrack } from '../services/catalog';
 import { createPlaylist, refreshLibrary } from '../services/library';
 import { appBar, button, chip, emptyState, listItem, watchScroll } from '../ui/components';
 import { toast } from '../ui/toast';
@@ -16,20 +16,6 @@ import { toast } from '../ui/toast';
  */
 
 const PARALLEL = 3;
-
-async function findOnYouTube(src: ImportedTrack): Promise<Track | null> {
-  const query = `${src.artist} ${src.title}`.trim();
-  for (const filter of ['songs', 'all'] as const) {
-    try {
-      const res = await search(query, filter);
-      const match = bestMatch(src, res.items.flatMap((i) => (i.track ? [i.track] : [])));
-      if (match) return match;
-    } catch (e) {
-      if ((e as BridgeError).code === 'offline') throw e;
-    }
-  }
-  return null;
-}
 
 defineRoute('import', ({ scope }) => {
   const screen = h('div.screen');
@@ -138,7 +124,7 @@ async function runImport(scope: Scope, body: HTMLElement, list: ImportedList, ta
       const i = next++;
       const src = list.tracks[i];
       current.textContent = `${src.artist} — ${src.title}`;
-      found[i] = await findOnYouTube(src).catch(() => null);
+      found[i] = await findTrack(src).catch(() => null);
       done++;
       fill.style.width = `${(done / list.tracks.length) * 100}%`;
       status.textContent = `${done} из ${list.tracks.length} · найдено ${found.filter(Boolean).length}`;

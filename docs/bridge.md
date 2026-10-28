@@ -74,6 +74,21 @@
 | `downloads`, `storageInfo`, `clearCache` | — | `Download[]` / `StorageInfo` / — |
 | `localImport` | `{mode: files\|folder}` | `Track[]` (системный выбор файлов) |
 | `localRemove` | `{id}` | — |
+| **Сеть и прокси** | | |
+| `proxyState` | — | `{proxies, activeId, enabled, vpnActive, inUse}` |
+| `proxyAdd` | `{link}` | `Proxy` — socks5://…, http://…, host:port, t.me/socks?…, youmusic://socks?… |
+| `proxyRemove` / `proxySelect` / `proxyShareLink` | `{id}` | — / — / ссылка youmusic:// |
+| `proxySetEnabled` | `{enabled}` | — |
+| `proxyPing` | `{id}` | мс до YouTube через прокси, `-1` — не отвечает |
+| **Обновления (OTA)** | | |
+| `updateState` / `updateCheck` / `updateDownload` | — | `UpdateState` |
+| `updateInstall` | — | — (PackageInstaller, система может попросить подтверждение) |
+| `updateSchedule` | `{enabled}` | — (фоновая проверка WorkManager, раз в 15 мин) |
+| **Нейросеть** | | |
+| `aiConfig` | — | `{baseUrl, model, enabled, hasKey}` (ключ наружу не отдаётся) |
+| `aiConfigure` | `{baseUrl?, model?, key?, enabled?}` | `AiConfig` |
+| `aiChat` | `{messages, temperature?}` | текст ответа (OpenAI-совместимый `/chat/completions`) |
+| `consumeDeepLink` | — | ссылка `youmusic://…`, с которой открыли приложение, или `null` |
 | **Моды** | | |
 | `modsList` | — | `InstalledMod[]` |
 | `modStage` | `{kind: zip\|folder}` | `{stageId, manifest}\|null` |
@@ -90,8 +105,11 @@
 | `playerError` | `{code, message, trackId}` |
 | `downloadProgress` | `Download` (статус `queued\|running\|done\|failed\|removed`) |
 | `libraryChanged` | `{what}` |
-| `network` | `{online, unmetered}` |
+| `network` | `{online, unmetered, vpn}` |
 | `insets` | `{top, bottom, left, right}` в dp |
+| `proxyChanged` | `ProxyState` |
+| `updateState` | `UpdateState` (прогресс скачивания, готовность) |
+| `deepLink` | `{url}` — открыта ссылка `youmusic://…` |
 | `back` | — (системная кнопка «Назад») |
 
 ## Как добавить новую нативную функцию

@@ -47,7 +47,7 @@ await page.click('.wave-hero .play-btn');
 await page.waitForTimeout(600);
 await page.click('.mini');
 await page.waitForTimeout(800);
-const modButton = await page.$('.slot-row .btn-icon[aria-label="Таймер сна"]');
+const modButton = await page.$('.player-actions .action[aria-label="Таймер сна"]');
 if (!modButton) errors.push('sleep-timer button missing');
 else {
   await modButton.click();

@@ -1,4 +1,4 @@
-import type { Download, Insets, Like, Playlist, RepeatMode, Track } from '../bridge/contract';
+import type { Download, Insets, Like, Playlist, RepeatMode, Track, UpdateState } from '../bridge/contract';
 import { computed, signal } from './signal';
 
 /** Global UI state. Native is the source of truth; these signals mirror it via bridge events. */
@@ -10,19 +10,29 @@ export interface Settings {
   cacheLimitMb: number;
   themeId: string;
   motion: 'system' | 'reduced' | 'full';
-  waveMode: 'mix' | 'familiar' | 'discover';
+  waveMode: 'mix' | 'familiar' | 'discover' | 'neuro';
   hideVersionsInSearch: boolean;
+  autoDownloadLiked: boolean;
+  crossfadeSec: number;
+  autoUpdate: boolean;
+  autoDownloadUpdates: boolean;
+  updateChannel: 'nightly' | 'stable';
 }
 
 export const defaultSettings: Settings = {
   streamQuality: 'high',
   downloadQuality: 'high',
   wifiOnlyDownloads: false,
-  cacheLimitMb: 512,
+  cacheLimitMb: 2048,
   themeId: 'graphite',
   motion: 'system',
   waveMode: 'mix',
   hideVersionsInSearch: false,
+  autoDownloadLiked: true,
+  crossfadeSec: 4,
+  autoUpdate: true,
+  autoDownloadUpdates: true,
+  updateChannel: 'nightly',
 };
 
 /** What started the current queue; shown in the player header and used to extend the wave. */
@@ -37,6 +47,8 @@ export const app = {
   insets: signal<Insets>({ top: 0, bottom: 0, left: 0, right: 0 }),
   settings: signal<Settings>(defaultSettings),
   version: signal({ app: '', extractor: '' }),
+  update: signal<UpdateState | null>(null),
+  aiEnabled: signal(false),
 
   likes: signal<Like[]>([]),
   playlists: signal<Playlist[]>([]),

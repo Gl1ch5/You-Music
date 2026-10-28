@@ -36,6 +36,9 @@ export async function setLiked(track: Track, liked: boolean): Promise<void> {
   uiBus.emit('like', { track, liked });
   try {
     await call('like', { track, liked });
+    if (liked && track.source === 'yt' && app.settings.peek().autoDownloadLiked && !app.downloads.peek().has(track.id)) {
+      await call('download', { tracks: [track], quality: app.settings.peek().downloadQuality });
+    }
   } catch (e) {
     toast('Не удалось сохранить лайк');
     refreshSoon();

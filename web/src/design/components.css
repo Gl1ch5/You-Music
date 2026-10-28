@@ -949,24 +949,41 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--s-2) 0 var(--s-3);
+  margin: var(--s-2) 0 var(--s-4);
 }
 
 .player-controls .btn-icon.big .icon {
   --icon: 32px;
 }
 
-.player-tools {
-  display: flex;
-  gap: var(--s-2);
+.player-body > :not(.player-art) {
+  flex-shrink: 0;
 }
 
-.player-tools .btn {
+.player-actions {
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid var(--line);
+  padding-top: var(--s-2);
+}
+
+.action {
   flex: 1;
   min-width: 0;
-  padding: 0 var(--s-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-1) 0;
+  color: var(--text-2);
+  font-size: var(--fs-tiny);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--t-press) var(--ease);
+}
+
+.action:active {
+  transform: scale(0.94);
 }
 
 .flying-cover {
@@ -1468,12 +1485,6 @@ input[type='color']::-webkit-color-swatch {
   overflow: hidden;
 }
 
-.slot-row {
-  display: flex;
-  justify-content: center;
-  gap: var(--s-2);
-  margin-top: var(--s-2);
-}
 
 .player-tools .btn.square {
   flex: none;

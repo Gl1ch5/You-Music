@@ -12,6 +12,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -32,22 +33,28 @@ data class PlayerErrorDto(val code: String, val message: String, val trackId: St
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private lateinit var tracker: PlaybackHistoryTracker
+    private var fade: FadeController? = null
 
     override fun onCreate() {
         super.onCreate()
         val graph = YouMusicApp.graph
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(graph.playbackDataSource))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(graph.playbackDataSource).setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(8)),
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
                 true,
             )
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
-            // Start as soon as ~0.7 s is buffered instead of the default 2.5 s.
+            // Start after ~0.7 s, then keep loading until the whole track (up to 15 min) is buffered and cached,
+            // so short network hiccups never interrupt playback.
             .setLoadControl(
                 DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(15_000, 60_000, 700, 2_000)
+                    .setBufferDurationsMs(900_000, 900_000, 700, 1_500)
+                    .setTargetBufferBytes(48 shl 20)
+                    .setPrioritizeTimeOverSizeThresholds(true)
                     .build(),
             )
             .build()
@@ -55,6 +62,7 @@ class PlaybackService : MediaSessionService() {
         tracker = PlaybackHistoryTracker(player, graph.library, graph.appScope)
         val prefetcher = StreamPrefetcher(player, graph.resolver, graph.downloads, graph.network, graph.appScope)
         player.addListener(prefetcher)
+        fade = FadeController(player, graph.kv, graph.appScope)
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 val mapped = (error.cause ?: error).toBridgeException()
@@ -100,6 +108,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         tracker.flush()
+        fade?.stop()
         session?.run {
             player.release()
             release()

@@ -32,12 +32,15 @@ import androidx.webkit.WebViewFeature
 import app.youmusic.bridge.BridgeHost
 import app.youmusic.bridge.CommandRegistry
 import app.youmusic.bridge.EventBus
+import app.youmusic.bridge.modules.AiModule
 import app.youmusic.bridge.modules.CatalogModule
 import app.youmusic.bridge.modules.LibraryModule
 import app.youmusic.bridge.modules.ModsModule
+import app.youmusic.bridge.modules.NetModule
 import app.youmusic.bridge.modules.OfflineModule
 import app.youmusic.bridge.modules.PlayerModule
 import app.youmusic.bridge.modules.SystemModule
+import app.youmusic.model.DeepLinkDto
 import app.youmusic.model.InsetsDto
 import app.youmusic.system.ActivityHost
 import kotlinx.coroutines.CompletableDeferred
@@ -51,6 +54,7 @@ import kotlinx.serialization.json.JsonObject
 class MainActivity : ComponentActivity(), ActivityHost {
     private lateinit var webView: WebView
     private var insets = InsetsDto(0f, 0f, 0f, 0f)
+    private var pendingDeepLink: String? = null
 
     private val pickerLock = Mutex()
     private var pending: CompletableDeferred<Any?>? = null
@@ -98,6 +102,8 @@ class MainActivity : ComponentActivity(), ActivityHost {
             LibraryModule(graph.library, graph.downloads),
             OfflineModule(graph.downloads, graph.local, graph.mediaCache, graph.paths, graph.kv, this),
             ModsModule(graph.mods, this),
+            NetModule(applicationContext, graph.proxies, graph.updates),
+            AiModule(graph.ai),
         ).forEach { it.register(registry) }
 
         val bridge = BridgeHost(lifecycleScope, registry)
@@ -137,7 +143,29 @@ class MainActivity : ComponentActivity(), ActivityHost {
         })
 
         webView.loadUrl("${BridgeHost.ORIGIN}/index.html")
+        handleDeepLink(intent)
+        askNotificationPermission()
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    /** youmusic:// links are kept until the UI asks for them (it may still be loading) and also pushed as an event. */
+    private fun handleDeepLink(intent: Intent?) {
+        val data = intent?.data?.takeIf { it.scheme == "youmusic" } ?: return
+        pendingDeepLink = data.toString()
+        EventBus.emit("deepLink", DeepLinkDto(data.toString()))
+    }
+
+    private fun askNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+    }
+
+    override fun consumeDeepLink(): String? = pendingDeepLink.also { pendingDeepLink = null }
 
     override fun onDestroy() {
         if (::webView.isInitialized) webView.destroy()

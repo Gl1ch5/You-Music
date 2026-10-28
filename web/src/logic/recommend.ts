@@ -17,6 +17,8 @@ export interface RecoSignals {
 export interface RecoSource {
   signals(): Promise<RecoSignals>;
   related(track: Track): Promise<Track[]>;
+  /** Optional extra candidates (e.g. AI suggestions); they count as strongly linked to the user's taste. */
+  extra?(alreadyDelivered: Track[]): Promise<Track[]>;
 }
 
 export type WaveMode = 'mix' | 'familiar' | 'discover';
@@ -266,6 +268,13 @@ export class Wave {
       // Out of seeds: grow from what the wave already played.
       const fallback = this.delivered.filter((t) => !this.expanded.has(t.id)).slice(-n);
       seeds.push(...fallback.map((track) => ({ track, liked: false })));
+    }
+    if (this.source.extra) {
+      const extra = await this.source.extra(this.delivered).catch(() => [] as Track[]);
+      for (const track of extra) {
+        this.candidates.push({ track, seedId: 'extra', seedLiked: true, rank: 0 }, { track, seedId: 'extra-2', seedLiked: true, rank: 0 });
+      }
+      if (extra.length && !seeds.length) return true;
     }
     if (!seeds.length) return false;
     const results = await Promise.allSettled(seeds.map((s) => this.source.related(s.track)));

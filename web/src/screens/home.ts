@@ -7,6 +7,7 @@ import { app, currentTrack, player, type Settings } from '../core/store';
 import { Wave } from '../logic/recommend';
 import { hooks, runHooks } from '../mods/registry';
 import { related } from '../services/catalog';
+import { aiSuggest, type AiPick } from '../services/ai';
 import { isWaveActive, playTracks, playWave, recoSource, togglePlay } from '../services/playback';
 import { saveSettings } from '../services/settings';
 import { chip, emptyState, iconButton, likeButton, playButton, sectionHead, skeletonCards, skeletonRows, trackCover } from '../ui/components';
@@ -39,7 +40,7 @@ function waveHero(scope: Scope): HTMLElement {
     onToggle: () => (isWaveActive() ? togglePlay() : playWave()),
   });
   const pill = h('div.now-pill');
-  const modes = h('div.chips', { style: { justifyContent: 'center', padding: '0' } });
+  const modes = h('div.chips', { style: { justifyContent: 'center', flexWrap: 'wrap', padding: '0' } });
 
   scope.effect(() => {
     const inWave = player.context.value?.kind === 'wave';
@@ -50,9 +51,10 @@ function waveHero(scope: Scope): HTMLElement {
   });
   scope.effect(() => {
     const mode = app.settings.value.waveMode;
+    const available = app.aiEnabled.value ? [...MODES, ['neuro', 'Нейро'] as [Settings['waveMode'], string]] : MODES;
     replaceChildren(
       modes,
-      MODES.map(([id, label]) =>
+      available.map(([id, label]) =>
         chip(label, id === mode, () => {
           saveSettings({ waveMode: id });
           recoCache = null;
@@ -66,7 +68,8 @@ function waveHero(scope: Scope): HTMLElement {
 
 async function loadRecommendations(): Promise<Track[]> {
   if (recoCache) return recoCache;
-  const wave = new Wave(recoSource, app.settings.peek().waveMode);
+  const mode = app.settings.peek().waveMode;
+  const wave = new Wave(recoSource, mode === 'neuro' ? 'mix' : mode);
   const tracks = await runHooks(hooks.recommendations, await wave.next(16), { source: 'home' });
   recoCache = tracks;
   return tracks;
@@ -95,6 +98,44 @@ function recommendationsSection(scope: Scope): HTMLElement {
     reload();
   }));
   return h('section.section', null, head, body);
+}
+
+let aiCache: AiPick[] | null = null;
+
+function neuroSection(scope: Scope): HTMLElement {
+  const body = h('div');
+  const box = h('section.section');
+  const load = (force = false) => {
+    if (force) aiCache = null;
+    replaceChildren(body, skeletonCards(4));
+    (aiCache ? Promise.resolve(aiCache) : aiSuggest(recoSource, 12))
+      .then((picks) => {
+        aiCache = picks;
+        const tracks = picks.map((p) => p.track);
+        replaceChildren(
+          body,
+          tracks.length
+            ? h(
+                'div.scroll-x',
+                null,
+                picks.map((p, i) => {
+                  const card = trackCard(p.track, () => playTracks(tracks, i, { kind: 'list', title: 'Нейро-подборка' }));
+                  if (p.reason) card.appendChild(h('div.card-sub.ellipsis.faint', null, p.reason));
+                  return card;
+                }),
+              )
+            : h('div.pad.muted.small', null, 'Нейросеть ничего не предложила — попробуйте обновить.'),
+        );
+      })
+      .catch((e) => replaceChildren(body, h('div.pad.muted.small', null, `Нейросеть недоступна: ${(e as Error).message}`)));
+  };
+  scope.effect(() => {
+    const on = app.aiEnabled.value && app.online.value;
+    box.hidden = !on;
+    if (on) load();
+  });
+  replaceChildren(box, h('div.section-head', null, h('h2.h2', { style: { flex: '1' } }, 'Нейро-подборка'), iconButton('sparkle', 'Обновить', () => load(true))), body);
+  return box;
 }
 
 function similarSection(scope: Scope, screen: HTMLElement): HTMLElement {
@@ -163,6 +204,7 @@ defineRoute('home', ({ scope }) => {
     banner,
     waveHero(scope),
     offlineSection(scope, screen),
+    neuroSection(scope),
     recommendationsSection(scope),
     similarSection(scope, screen),
     recentSection(scope),

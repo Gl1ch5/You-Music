@@ -183,6 +183,60 @@ export interface InstalledMod {
   baseUrl: string;
 }
 
+export interface Proxy {
+  id: string;
+  type: 'socks5' | 'http';
+  host: string;
+  port: number;
+  user?: string | null;
+  pass?: string | null;
+  name?: string | null;
+  /** Last measured round trip to YouTube through this proxy; -1 = failed. */
+  pingMs?: number | null;
+}
+
+export interface ProxyState {
+  proxies: Proxy[];
+  activeId?: string | null;
+  enabled: boolean;
+  vpnActive: boolean;
+  inUse: boolean;
+}
+
+export interface VersionInfo {
+  versionCode: number;
+  versionName: string;
+  channel: string;
+  apk: string;
+  notes?: string | null;
+  sha?: string | null;
+  publishedAt?: string | null;
+}
+
+export type UpdateStatus = 'idle' | 'checking' | 'uptodate' | 'available' | 'downloading' | 'ready' | 'installing' | 'error';
+
+export interface UpdateState {
+  currentVersion: string;
+  currentCode: number;
+  latest?: VersionInfo | null;
+  status: UpdateStatus;
+  progress: number;
+  error?: string | null;
+  checkedAt: number;
+}
+
+export interface AiConfig {
+  baseUrl: string;
+  model: string;
+  enabled: boolean;
+  hasKey: boolean;
+}
+
+export interface AiMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 export interface Insets {
   top: number;
   bottom: number;
@@ -210,6 +264,7 @@ export interface Commands {
   share: [{ text: string }, void];
   openUrl: [{ text: string }, void];
   moveToBack: [None, void];
+  consumeDeepLink: [None, string | null];
   setSystemBars: [{ light: boolean }, void];
   pickTextFile: [{ mime: string }, { name: string; text: string } | null];
   saveTextFile: [{ name: string; text: string; mime: string }, boolean];
@@ -260,6 +315,24 @@ export interface Commands {
   localImport: [{ mode: 'files' | 'folder' }, Track[]];
   localRemove: [{ id: string }, void];
 
+  proxyState: [None, ProxyState];
+  proxyAdd: [{ link: string }, Proxy];
+  proxyRemove: [{ id: string }, void];
+  proxySelect: [{ id: string }, void];
+  proxySetEnabled: [{ enabled: boolean }, void];
+  proxyPing: [{ id: string }, number];
+  proxyShareLink: [{ id: string }, string];
+
+  updateState: [None, UpdateState];
+  updateCheck: [None, UpdateState];
+  updateDownload: [None, UpdateState];
+  updateInstall: [None, void];
+  updateSchedule: [{ enabled: boolean }, void];
+
+  aiConfig: [None, AiConfig];
+  aiConfigure: [{ baseUrl?: string; model?: string; key?: string; enabled?: boolean }, AiConfig];
+  aiChat: [{ messages: AiMessage[]; temperature?: number }, string];
+
   modsList: [None, InstalledMod[]];
   modStage: [{ kind: 'zip' | 'folder' }, StagedMod | null];
   modInstall: [{ stageId: string }, InstalledMod];
@@ -279,7 +352,10 @@ export interface NativeEvents {
   playerError: { code: string; message: string; trackId: string | null };
   downloadProgress: Download;
   libraryChanged: { what: string };
-  network: { online: boolean; unmetered: boolean };
+  network: { online: boolean; unmetered: boolean; vpn: boolean };
+  proxyChanged: ProxyState;
+  updateState: UpdateState;
+  deepLink: { url: string };
   insets: Insets;
   back: Record<string, never>;
 }

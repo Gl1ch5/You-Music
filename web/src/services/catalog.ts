@@ -1,7 +1,9 @@
 import { call } from '../bridge/bridge';
-import type { ArtistPage, CollectionPage, SearchFilter, SearchItem, Track } from '../bridge/contract';
+import type { BridgeError } from '../bridge/bridge';
+import type { ArtistPage, CollectionPage, ImportedTrack, SearchFilter, SearchItem, Track } from '../bridge/contract';
 import { app } from '../core/store';
 import { normalizeTrack, versionTags } from '../logic/normalize';
+import { bestMatch } from '../logic/match';
 import { rankTracks } from '../logic/rank';
 import { hooks, runHooks } from '../mods/registry';
 
@@ -69,4 +71,19 @@ export function related(track: Track): Promise<Track[]> {
     relatedCache.set(track.id, p);
   }
   return p;
+}
+
+/** Finds the YouTube upload that best matches a track known by artist and title (imports, AI suggestions). */
+export async function findTrack(src: ImportedTrack): Promise<Track | null> {
+  const query = `${src.artist} ${src.title}`.trim();
+  for (const filter of ['songs', 'all'] as const) {
+    try {
+      const res = await search(query, filter);
+      const match = bestMatch(src, res.items.flatMap((i) => (i.track ? [i.track] : [])));
+      if (match) return match;
+    } catch (e) {
+      if ((e as BridgeError).code === 'offline') throw e;
+    }
+  }
+  return null;
 }

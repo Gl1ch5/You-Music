@@ -1,6 +1,6 @@
 import { call } from '../bridge/bridge';
 import type { Track } from '../bridge/contract';
-import { h, prefersReducedMotion, replaceChildren } from '../core/dom';
+import { h, icon, prefersReducedMotion, replaceChildren } from '../core/dom';
 import { Scope } from '../core/signal';
 import { currentTrack, livePosition, player } from '../core/store';
 import { guard, slots } from '../mods/registry';
@@ -10,7 +10,7 @@ import { related } from '../services/catalog';
 import { download, removeDownload } from '../services/library';
 import { expectLoading, next, playTracks, previous, seek, togglePlay } from '../services/playback';
 import { onBack } from '../ui/back';
-import { button, emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
+import { emptyState, haptic, iconButton, likeButton, onFrame, playButton, progressBar, reactiveIcon, setCoverUrls, skeletonRows, trackCover, trackRow, cover } from '../ui/components';
 import { applyDynamicBackground } from '../ui/hero';
 import { openSheet } from '../ui/sheet';
 import { openTrackMenu } from '../ui/trackMenu';
@@ -55,12 +55,23 @@ export function mountFullPlayer(): HTMLElement {
     shuffleBtn.classList.toggle('accent', player.shuffle.value);
   });
 
-  const downloadBtn = h('button.btn.square', { attrs: { 'aria-label': 'Скачать' }, onclick: () => toggleDownload() }, reactiveIcon(scope, () => (app.downloads.value.get(currentTrack.value?.id ?? '')?.status === 'done' ? 'downloaded' : 'download')));
-  const modSlot = h('div.slot-row');
+  const action = (glyph: SVGElement, label: string | HTMLElement, onclick: () => void) =>
+    h('button.action', { onclick, attrs: { 'aria-label': typeof label === 'string' ? label : 'Скачать' } }, glyph, typeof label === 'string' ? h('span', null, label) : label);
+  const dlLabel = h('span');
   scope.effect(() => {
-    const buttons = slots.playerButtons.value;
-    modSlot.hidden = !buttons.length;
-    replaceChildren(modSlot, buttons.map((b) => iconButton(b.icon, b.label, () => guard(b.modId, b.onClick)(currentTrack.peek()))));
+    const d = app.downloads.value.get(currentTrack.value?.id ?? '');
+    dlLabel.textContent = d?.status === 'done' ? 'Скачано' : d ? `${Math.round(d.progress * 100)}%` : 'Скачать';
+  });
+  const fixedActions = [
+    action(icon('queue'), 'Очередь', openQueue),
+    action(icon('lyrics'), 'Текст', openLyrics),
+    action(icon('similar'), 'Похожие', openSimilar),
+    action(reactiveIcon(scope, () => (app.downloads.value.get(currentTrack.value?.id ?? '')?.status === 'done' ? 'downloaded' : 'download')), dlLabel, toggleDownload),
+  ];
+  const actions = h('div.player-actions');
+  scope.effect(() => {
+    const mods = slots.playerButtons.value.map((b) => action(icon(b.icon), b.label, () => guard(b.modId, b.onClick)(currentTrack.peek())));
+    replaceChildren(actions, ...fixedActions, ...mods);
   });
 
   const head = h('div.player-head', null, iconButton('chevron-down', 'Свернуть', () => closePlayer()), context, iconButton('more', 'Действия', () => {
@@ -85,8 +96,7 @@ export function mountFullPlayer(): HTMLElement {
       iconButton('next', 'Следующий', () => next(), 'big on'),
       repeatBtn,
     ),
-    h('div.player-tools', null, button('Очередь', openQueue, { icon: 'queue' }), button('Текст', openLyrics, { icon: 'lyrics' }), button('Похожие', openSimilar, { icon: 'similar' }), downloadBtn),
-    modSlot,
+    actions,
   );
 
   root = h('div.player', { attrs: { 'aria-hidden': 'true' } }, bg, dim, body);

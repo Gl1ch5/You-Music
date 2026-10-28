@@ -53,11 +53,19 @@ defineRoute('settings', ({ scope }) => {
       group(
         'Звук и поиск',
         listItem({ icon: 'note', title: 'Качество потока', sub: QUALITY[s.streamQuality], onClick: () => choose('Качество потока', QUALITY, s.streamQuality, (streamQuality) => saveSettings({ streamQuality })) }),
+        listItem({
+          icon: 'similar',
+          title: 'Плавные переходы',
+          sub: s.crossfadeSec ? `Затухание ${s.crossfadeSec} с между треками` : 'Выключены',
+          onClick: () => choose<string>('Плавные переходы', { '0': 'Выключены', '2': '2 секунды', '4': '4 секунды', '6': '6 секунд', '8': '8 секунд' }, String(s.crossfadeSec), (v) => saveSettings({ crossfadeSec: Number(v) })),
+        }),
+        listItem({ icon: 'sparkle', title: 'Нейро-рекомендации', sub: app.aiEnabled.value ? 'Включены' : 'Настроить модель и API', onClick: () => navigate('ai') }),
         listItem({ icon: 'search', title: 'Скрывать версии в поиске', sub: 'Sped up, slowed, nightcore — только если ищете их', trailing: switchControl(s.hideVersionsInSearch, (hideVersionsInSearch) => saveSettings({ hideVersionsInSearch })) }),
       ),
       group(
         'Загрузки и место',
         listItem({ icon: 'download', title: 'Качество загрузок', sub: QUALITY[s.downloadQuality], onClick: () => choose('Качество загрузок', QUALITY, s.downloadQuality, (downloadQuality) => saveSettings({ downloadQuality })) }),
+        listItem({ icon: 'heart', title: 'Скачивать лайкнутые', sub: 'Трек сохраняется целиком, как только вы его лайкнули', trailing: switchControl(s.autoDownloadLiked, (autoDownloadLiked) => saveSettings({ autoDownloadLiked })) }),
         listItem({ icon: 'offline', title: 'Скачивать только по Wi-Fi', trailing: switchControl(s.wifiOnlyDownloads, (wifiOnlyDownloads) => saveSettings({ wifiOnlyDownloads })) }),
         listItem({
           icon: 'storage',
@@ -78,11 +86,16 @@ defineRoute('settings', ({ scope }) => {
         listItem({ icon: 'import', title: 'Импорт библиотеки', sub: 'Из файла экспорта', onClick: importLibrary }),
         listItem({ icon: 'playlist', title: 'Перенос из Spotify и Яндекс Музыки', sub: 'По ссылке, списком или CSV', onClick: () => navigate('import') }),
       ),
+      group(
+        'Сеть',
+        listItem({ icon: 'storage', title: 'Прокси', sub: 'SOCKS5 / HTTP, пинг, переключение. Не работает при включённом VPN', onClick: () => navigate('proxy') }),
+      ),
       group('Моды', listItem({ icon: 'puzzle', title: 'Моды', sub: `${mods.value.filter((m) => m.state.enabled).length} включено`, onClick: () => navigate('mods') })),
       group(
         'О приложении',
         listItem({ icon: 'info', title: 'You Music', sub: `Версия ${v.app} · NewPipeExtractor ${v.extractor}` }),
-        listItem({ icon: 'export', title: 'Проверить обновления', sub: 'Страница релизов на GitHub', onClick: () => call('openUrl', { text: RELEASES_URL }) }),
+        listItem({ icon: 'download', title: 'Обновления', sub: updateSub(), onClick: () => navigate('updates') }),
+        listItem({ icon: 'export', title: 'Все релизы на GitHub', onClick: () => call('openUrl', { text: RELEASES_URL }) }),
       ),
     );
   });
@@ -91,6 +104,14 @@ defineRoute('settings', ({ scope }) => {
   screen.append(bar, h('div.page-head', null, h('h1.h1', null, 'Настройки')), body);
   return screen;
 });
+
+function updateSub(): string {
+  const u = app.update.value;
+  if (!u) return 'Проверить и установить новую версию';
+  if (u.status === 'ready') return `Готово к установке: ${u.latest?.versionName}`;
+  if (u.status === 'available') return `Доступна ${u.latest?.versionName}`;
+  return u.status === 'uptodate' ? 'Последняя версия' : 'Проверить и установить новую версию';
+}
 
 function pickTheme(): void {
   actionSheet(

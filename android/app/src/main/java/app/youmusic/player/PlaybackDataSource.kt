@@ -19,7 +19,7 @@ import app.youmusic.source.StreamResolveException
 import app.youmusic.source.StreamResolver
 
 /**
- * Where audio bytes come from, in order: downloaded file → stream cache → YouTube (resolved lazily).
+ * Where audio bytes come from, in order: downloaded file → stream cache → YouTube (resolved lazily, read in chunks).
  * Local files and content:// uris bypass the cache entirely.
  */
 @UnstableApi
@@ -36,9 +36,12 @@ class PlaybackDataSourceFactory(
     private val remote: DataSource.Factory = CacheDataSource.Factory()
         .setCache(cache)
         .setCacheKeyFactory { spec -> spec.key ?: spec.uri.toString() }
-        .setUpstreamDataSourceFactory(
-            ResolvingDataSource.Factory(OkHttpDataSource.Factory(Http.client)) { spec -> resolve(spec) },
-        )
+        .setUpstreamDataSourceFactory {
+            ChunkedDataSource(
+                ResolvingDataSource.Factory(OkHttpDataSource.Factory(Http.callFactory)) { spec -> resolve(spec) }.createDataSource(),
+                onForbidden = { uri -> uri.lastPathSegment?.let(resolver::invalidate) },
+            )
+        }
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     private fun resolve(spec: DataSpec): DataSpec {
