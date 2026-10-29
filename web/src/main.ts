@@ -39,7 +39,7 @@ import { loadThemes } from './theme/engine';
 import { handleBack, onBack } from './ui/back';
 import { initRowMarkers } from './ui/components';
 
-/** Web player and desktop app: a phone-width column on wide screens, media keys from the keyboard. */
+/** Web player and desktop app: desktop layout on a wide window (`html.web` in components.css), media keys from the keyboard. */
 function initKeyboard(): void {
   document.documentElement.classList.add('web');
   window.addEventListener('keydown', (e) => {

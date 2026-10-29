@@ -29,6 +29,7 @@ export const graphiteIcons: IconSet = {
   more: '<circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none"/>',
   back: '<path d="M19 12H5.5"/><path d="m11 6-6 6 6 6"/>',
   'chevron-down': '<path d="m6 9.5 6 6 6-6"/>',
+  'chevron-up': '<path d="m6 14.5 6-6 6 6"/>',
   'chevron-right': '<path d="m9.5 6 6 6-6 6"/>',
   close: '<path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/>',
   search: '<circle cx="11" cy="11" r="6.3"/><path d="m19.5 19.5-4-4"/>',

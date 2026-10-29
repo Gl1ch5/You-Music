@@ -1,4 +1,5 @@
 import { h, icon, setIcon } from '../core/dom';
+import { platform } from '../bridge/bridge';
 import { effect } from '../core/signal';
 import { app, player } from '../core/store';
 import { haptic } from '../ui/components';
@@ -12,8 +13,10 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 
 /** App frame: tab roots, mini player slot, bottom navigation. Inactive tabs show outline icons, the active one filled. */
 export function mountShell(root: HTMLElement, extras: HTMLElement[]): void {
-  const screens = h('div', { style: { position: 'absolute', inset: '0' } });
+  const screens = h('div.screens');
   const nav = h('nav.tabbar', { attrs: { 'aria-label': 'Разделы' } });
+  // Web player / desktop app: on a wide window the tab bar becomes a sidebar with the app's name on top.
+  if (platform === 'web' || platform === 'desktop') nav.append(h('div.nav-brand', null, h('img', { attrs: { src: 'icons/icon-192.png', alt: '' } }), 'You Music'));
   for (const tab of TABS) {
     const glyph = icon(tab.icon);
     const btn = h('button.tab', { attrs: { 'aria-label': tab.label }, onclick: () => {

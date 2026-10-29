@@ -238,9 +238,34 @@ def chart(source: str) -> dict:
         tracks = [x for x in (_yandex_track(e["track"]) for e in ch.get("tracks") or [] if isinstance(e, dict) and e.get("track")) if x]
     except (ApiError, OSError, ValueError):
         pass
-    if not tracks:
-        tracks = _yandex_playlist("users/yamusic-top/playlists/1076")["tracks"]
+    try:
+        if not tracks:
+            tracks = _yandex_playlist("users/yamusic-top/playlists/1076")["tracks"]
+    except ApiError as e:
+        # Yandex answers only from Russian networks (the web player's server is abroad): fall back to YouTube's chart for Russia.
+        if e.code not in ("unavailable", "network"):
+            raise
+        return _youtube_chart()
     return {"title": "Чарт Яндекс Музыки", "source": "yandex", "tracks": tracks, "via": None}
+
+
+def _youtube_chart(country: str = "RU") -> dict:
+    from . import ytm
+
+    try:
+        resp = ytm.call("browse", {"browseId": "FEmusic_charts", "formData": {"selectedValues": [country]}})
+        ids = [i[2:] for i in ytm.walk(resp, "browseId") if isinstance(i, str) and i.startswith("VLPL")]
+        if not ids:
+            raise ApiError("unavailable", "Чарт недоступен")
+        tracks = ytm.collection(ytm.playlist_url(ids[0])).get("tracks") or []
+    except (ytm.YtmError, OSError):
+        raise ApiError("network", "Не удалось загрузить чарт") from None
+    return {
+        "title": "Чарт YouTube",
+        "source": "yandex",
+        "tracks": [{"title": t["title"], "artist": t["artist"], "durationMs": t.get("durationMs") or 0, "artwork": t.get("artwork"), "album": t.get("album")} for t in tracks],
+        "via": None,
+    }
 
 
 def _spotify(kind: str, id_: str) -> dict:

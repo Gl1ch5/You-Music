@@ -1,14 +1,17 @@
 import { h } from '../core/dom';
+import { platform } from '../bridge/bridge';
 import { Scope } from '../core/signal';
 import { currentTrack, livePosition, player } from '../core/store';
 import { artFor } from '../services/art';
-import { next, previous, togglePlay } from '../services/playback';
-import { cover, haptic, likeButton, onFrame, playButton, setCoverUrls } from '../ui/components';
-import { dragPlayer, openPlayer, releasePlayer, setMiniCoverSource } from './full';
+import { next, previous, seek, togglePlay } from '../services/playback';
+import { cover, haptic, iconButton, likeButton, onFrame, playButton, progressBar, setCoverUrls } from '../ui/components';
+import { dragPlayer, openPlayer, openQueue, releasePlayer, setMiniCoverSource } from './full';
 
 /**
  * Mini player above the tab bar. Tap or swipe up opens the full player (it follows the finger);
  * swipe left/right switches tracks with the cover sliding out and the next one sliding in.
+ * In the web player and the desktop app it also carries prev/next, a seek bar and the queue: on a wide window
+ * it becomes the bottom player bar (see `html.wide` in components.css); on a narrow one those stay hidden.
  */
 export function mountMiniPlayer(): HTMLElement {
   const scope = new Scope();
@@ -18,14 +21,23 @@ export function mountMiniPlayer(): HTMLElement {
   const artist = h('div.row-sub.ellipsis');
   const swipe = h('div.mini-swipe', null, coverBox, h('div.mini-text', null, title, artist));
   const line = h('i');
-  const el = h(
-    'div.mini.hidden',
-    { attrs: { role: 'button', 'aria-label': 'Открыть плеер' } },
-    swipe,
-    likeButton(scope, () => currentTrack.value),
-    playButton(scope, { size: 'sm', flat: true, playing: () => player.wantsPlay.value, loading: () => player.buffering.value && player.wantsPlay.value, onToggle: togglePlay }),
-    h('div.mini-line', null, line),
-  );
+  const play = playButton(scope, { size: 'sm', flat: true, playing: () => player.wantsPlay.value, loading: () => player.buffering.value && player.wantsPlay.value, onToggle: togglePlay });
+  const like = likeButton(scope, () => currentTrack.value);
+  const wide = platform === 'web' || platform === 'desktop';
+  let parts: HTMLElement[] = [like, play];
+  if (wide) {
+    const seekBar = progressBar(scope, (ms) => seek(ms));
+    parts = [
+      h('div.mini-side', null, like, iconButton('queue', 'Очередь', () => openQueue(), 'mini-extra'), iconButton('chevron-up', 'Открыть плеер', () => openPlayer(), 'mini-extra')),
+      h(
+        'div.mini-center',
+        null,
+        h('div.mini-ctrls', null, iconButton('prev', 'Предыдущий', () => previous(), 'mini-extra'), play, iconButton('next', 'Следующий', () => next(), 'mini-extra')),
+        h('div.mini-seek', null, seekBar.elapsed, seekBar.el, seekBar.remaining),
+      ),
+    ];
+  }
+  const el = h('div.mini.hidden', { attrs: { role: 'button', 'aria-label': 'Открыть плеер' } }, swipe, ...parts, h('div.mini-line', null, line));
   // Transparent strip around the mini player: taps that miss it by a few pixels must not hit the list below.
   const shield = h('div.mini-shield.hidden');
   // A sibling, not a child: the mini player clips its overflow, including hit testing.
@@ -73,7 +85,7 @@ export function mountMiniPlayer(): HTMLElement {
   let dragged = false;
 
   el.addEventListener('pointerdown', (e) => {
-    if ((e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest('button, .mini-seek')) return;
     startX = e.clientX;
     startY = e.clientY;
     startT = performance.now();
@@ -131,7 +143,7 @@ export function mountMiniPlayer(): HTMLElement {
   // Open on `click`, not on pointerup: hiding the mini player before the click is dispatched would let that
   // click land on the track row underneath and start it.
   el.addEventListener('click', (e) => {
-    if (dragged || (e.target as HTMLElement).closest('button')) return;
+    if (dragged || (e.target as HTMLElement).closest('button, .mini-seek')) return;
     openPlayer();
   });
   return el;

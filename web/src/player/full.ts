@@ -453,7 +453,7 @@ function attachDragToClose(...handles: HTMLElement[]): void {
 
 /* ───────── Panels: queue, lyrics, similar ───────── */
 
-function openQueue(): void {
+export function openQueue(): void {
   const scope = new Scope();
   openSheet({
     header: h('div.h2', { style: { flex: '1' } }, 'Очередь'),

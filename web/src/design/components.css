@@ -5,6 +5,11 @@
   overflow: hidden;
 }
 
+.screens {
+  position: absolute;
+  inset: 0;
+}
+
 .tab-root {
   position: absolute;
   inset: 0;
@@ -2290,20 +2295,277 @@ input[type='color']::-webkit-color-swatch {
   color: var(--text);
 }
 
-/* ───────── Web player / desktop app on a wide screen ───────── */
-/* The body becomes the containing block of every fixed layer (player, sheets, toasts), so the whole app is one column. */
-@media (min-width: 760px) {
+/* ───────── Web player / desktop app ───────── */
+/* The mini player's extra controls (prev/next, seek, queue) exist only in web builds and show only on a wide window. */
+.nav-brand,
+.mini-extra,
+.mini-seek {
+  display: none;
+}
+
+.mini-center,
+.mini-ctrls,
+.mini-side {
+  display: contents;
+}
+
+/* Wide window: sidebar instead of the tab bar, the mini player becomes a full-width player bar,
+   content is centred in a readable column, the full player is two columns, sheets are dialogs. */
+@media (min-width: 900px) {
   html.web {
-    background: var(--surface);
+    --nav-h: 0px;
+    --mini-h: var(--bar-h);
+    --gutter: var(--s-5);
   }
 
-  html.web body {
-    position: relative;
-    width: var(--shell-w);
-    height: 100vh;
+  html.web .screens {
+    left: var(--side-w);
+  }
+
+  html.web .screen {
+    padding-inline: max(0px, calc((100% - var(--content-w)) / 2));
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  html.web .screen::-webkit-scrollbar {
+    display: block;
+    width: 8px;
+  }
+
+  html.web .screen::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: var(--r-pill);
+  }
+
+  html.web .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  html.web .tiles {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+
+  /* Sidebar */
+  html.web .tabbar {
+    top: 0;
+    right: auto;
+    width: var(--side-w);
+    height: auto;
+    flex-direction: column;
+    gap: 2px;
+    padding: calc(var(--safe-top) + var(--s-4)) var(--s-2) var(--s-4);
+    border-top: 0;
+    border-right: 1px solid var(--line);
+  }
+
+  html.web .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: 0 var(--s-2) var(--s-5);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  html.web .nav-brand img {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+
+  html.web .tab {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--s-3);
+    height: var(--hit);
+    padding: 0 var(--s-3);
+    border-radius: var(--r-mini);
+    font-size: var(--fs-body);
+    color: var(--text-2);
+  }
+
+  html.web .tab:hover {
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+  }
+
+  html.web .tab.active {
+    color: var(--text);
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+  }
+
+  /* Player bar */
+  html.web .mini {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 21;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: var(--s-5);
+    height: calc(var(--bar-h) + var(--safe-bottom));
+    padding: 0 var(--s-4) var(--safe-bottom);
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    box-shadow: none;
+    touch-action: auto;
+  }
+
+  html.web .mini-shield,
+  html.web .mini-line {
+    display: none;
+  }
+
+  html.web .mini-swipe {
+    grid-column: 1;
+    grid-row: 1;
+    cursor: pointer;
+  }
+
+  html.web .mini-cover {
+    width: 56px;
+    height: 56px;
+  }
+
+  html.web .mini-center {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  html.web .mini-ctrls {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
+
+  html.web .mini-seek {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    width: 100%;
+    font-size: var(--fs-tiny);
+    color: var(--text-3);
+  }
+
+  html.web .mini-seek time {
+    min-width: 40px;
+    text-align: center;
+  }
+
+  html.web .mini-seek .progress {
+    flex: 1;
+    height: 20px;
+  }
+
+  html.web .mini-seek .progress-tip {
+    bottom: 24px;
+  }
+
+  html.web .mini-side {
+    grid-column: 3;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  html.web .mini-extra {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  /* Full player: cover (or lyrics) on the left, track and controls on the right */
+  html.web .player-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+    grid-template-rows: auto 1fr repeat(6, auto) 1fr;
+    column-gap: var(--s-8);
+    width: 100%;
+    max-width: var(--content-w);
     margin: 0 auto;
-    overflow: hidden;
-    transform: translateZ(0);
-    box-shadow: 0 0 0 1px var(--line);
+    padding: var(--s-3) var(--s-6) var(--s-6);
+  }
+
+  html.web .player-head {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  html.web .player-art {
+    grid-column: 1;
+    grid-row: 2 / -1;
+    margin: var(--s-4) 0 0;
+    align-self: stretch;
+  }
+
+  html.web .player-art .art-frame {
+    width: min(100%, 62vh);
+  }
+
+  html.web .player-body > :not(.player-head, .player-art) {
+    grid-column: 2;
+  }
+
+  html.web .player-meta {
+    grid-row: 3;
+  }
+
+  html.web .player-body > .progress {
+    grid-row: 4;
+  }
+
+  html.web .player-body > .times {
+    grid-row: 5;
+  }
+
+  html.web .player-controls {
+    grid-row: 6;
+  }
+
+  html.web .player-pills {
+    grid-row: 7;
+  }
+
+  html.web .wave-banner {
+    grid-row: 8;
+    margin-top: var(--s-5);
+  }
+
+  /* Sheets become centred dialogs */
+  html.web .sheet {
+    left: 50%;
+    right: auto;
+    bottom: var(--s-6);
+    width: min(560px, 100% - var(--s-6));
+    max-height: 80%;
+    translate: -50% 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding-bottom: var(--s-2);
+    transform: translateY(calc(100% + var(--s-6) + 8px));
+  }
+
+  html.web .sheet-layer.open .sheet {
+    transform: none;
+  }
+
+  html.web .sheet-handle {
+    display: none;
+  }
+
+  html.web .toast-layer {
+    left: var(--side-w);
+  }
+
+  html.web .onboarding {
+    padding-inline: max(var(--s-4), calc((100% - 640px) / 2));
   }
 }
