@@ -40,8 +40,10 @@ def _ui_dir() -> Path:
 
 
 def _icon() -> Path:
+    # Windows (WinForms) builds the window icon with System.Drawing.Icon: only .ico works there, a PNG crashes the app.
+    name = "icon.ico" if sys.platform == "win32" else "icon.png"
     base = _bundle_dir()
-    for p in (base / "youmusic" / "assets" / "icon.png", Path(__file__).resolve().parent / "assets" / "icon.png"):
+    for p in (base / "youmusic" / "assets" / name, Path(__file__).resolve().parent / "assets" / name):
         if p.is_file():
             return p
     return Path()
