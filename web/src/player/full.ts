@@ -1,4 +1,4 @@
-import { call } from '../bridge/bridge';
+import { call, platform } from '../bridge/bridge';
 import type { Track } from '../bridge/contract';
 import { h, icon, prefersReducedMotion, replaceChildren, swallowNextClick } from '../core/dom';
 import { Scope } from '../core/signal';
@@ -74,7 +74,7 @@ export function mountFullPlayer(): HTMLElement {
     dlBadge.hidden = !running;
     dlBtn.classList.toggle('accent', d?.status === 'done');
     dlBtn.setAttribute('aria-label', d?.status === 'done' ? 'Скачано' : 'Скачать');
-    dlBtn.hidden = t?.source !== 'yt';
+    dlBtn.hidden = t?.source !== 'yt' || platform === 'web';
   });
   const pill = (glyph: SVGElement, label: string, onclick: () => void) =>
     h('button.player-pill', { onclick, attrs: { 'aria-label': label, title: label } }, glyph);

@@ -1,5 +1,5 @@
 import { defineRoute, goBack, navigate } from '../app/router';
-import { call } from '../bridge/bridge';
+import { call, platform } from '../bridge/bridge';
 import { formatBytes, h, replaceChildren } from '../core/dom';
 import { app, type Settings } from '../core/store';
 import { ICON_PACKS } from '../design/iconPacks';
@@ -25,7 +25,11 @@ function choose<K extends string>(title: string, options: Record<K, string>, cur
   );
 }
 
-function group(title: string, ...items: HTMLElement[]): HTMLElement {
+/** Android or the mock (screenshots): everything; the web player and the desktop app hide what they cannot do. */
+const phone = platform === 'android' || platform === 'mock';
+const canDownload = platform !== 'web';
+
+function group(title: string, ...items: (HTMLElement | false)[]): HTMLElement {
   return h('section.section', null, h('div.section-head', null, h('div.small.muted', null, title)), items);
 }
 
@@ -62,7 +66,7 @@ defineRoute('settings', ({ scope }) => {
       group(
         'Оформление',
         listItem({ icon: 'palette', title: 'Тема', sub: theme.name, onClick: () => pickTheme() }),
-        listItem({ icon: 'app-icon', title: 'Иконка приложения', sub: 'Светлые и тёмные варианты', onClick: () => navigate('appIcon') }),
+        phone && listItem({ icon: 'app-icon', title: 'Иконка приложения', sub: 'Светлые и тёмные варианты', onClick: () => navigate('appIcon') }),
         listItem({ icon: 'grid', title: 'Значки', sub: ICON_STYLES[s.iconStyle] ?? ICON_STYLES.theme, onClick: () => choose('Значки', ICON_STYLES, s.iconStyle, (iconStyle) => saveSettings({ iconStyle })) }),
         listItem({ icon: 'edit', title: 'Редактор тем', sub: 'Цвета, скругления, зерно, анимации', onClick: () => navigate('themeEditor', { id: theme.id }) }),
         listItem({ icon: 'sparkle', title: 'Анимации', sub: MOTION[s.motion], onClick: () => choose('Анимации', MOTION, s.motion, (motion) => saveSettings({ motion })) }),
@@ -100,19 +104,19 @@ defineRoute('settings', ({ scope }) => {
         }),
         listItem({ icon: 'sparkle', title: 'Своя нейросеть', sub: app.aiEnabled.value ? 'Подключена' : 'Подключить свою модель и API', onClick: () => navigate('ai') }),
       ),
-      group(
+      canDownload && group(
         'Загрузки и место',
         listItem({ icon: 'download', title: 'Качество загрузок', sub: QUALITY[s.downloadQuality], onClick: () => choose('Качество загрузок', QUALITY, s.downloadQuality, (downloadQuality) => saveSettings({ downloadQuality })) }),
-        listItem({ icon: 'heart', title: 'Скачивать лайкнутые', sub: 'Трек сохраняется целиком, как только вы его лайкнули', trailing: switchControl(s.autoDownloadLiked, (autoDownloadLiked) => saveSettings({ autoDownloadLiked })) }),
-        listItem({ icon: 'offline', title: 'Скачивать только по Wi-Fi', trailing: switchControl(s.wifiOnlyDownloads, (wifiOnlyDownloads) => saveSettings({ wifiOnlyDownloads })) }),
-        listItem({
+        phone && listItem({ icon: 'heart', title: 'Скачивать лайкнутые', sub: 'Трек сохраняется целиком, как только вы его лайкнули', trailing: switchControl(s.autoDownloadLiked, (autoDownloadLiked) => saveSettings({ autoDownloadLiked })) }),
+        phone && listItem({ icon: 'offline', title: 'Скачивать только по Wi-Fi', trailing: switchControl(s.wifiOnlyDownloads, (wifiOnlyDownloads) => saveSettings({ wifiOnlyDownloads })) }),
+        phone && listItem({
           icon: 'storage',
           title: 'Размер кэша',
           sub: `${s.cacheLimitMb} МБ · применится после перезапуска`,
           onClick: () =>
             choose<string>('Размер кэша', { '256': '256 МБ', '512': '512 МБ', '1024': '1 ГБ', '2048': '2 ГБ', '4096': '4 ГБ' }, String(s.cacheLimitMb), (v) => saveSettings({ cacheLimitMb: Number(v) })),
         }),
-        h('div.item', null, h('div.item-main', null, h('div', null, 'Хранилище'), h('div.item-sub', null, storageSub)), button('Очистить кэш', async () => {
+        phone && h('div.item', null, h('div.item-main', null, h('div', null, 'Хранилище'), h('div.item-sub', null, storageSub)), button('Очистить кэш', async () => {
           await call('clearCache');
           toast('Кэш очищен', { icon: 'check' });
           refreshStorage();
@@ -120,7 +124,7 @@ defineRoute('settings', ({ scope }) => {
       ),
       group(
         'Резервная копия',
-        listItem({
+        phone && listItem({
           icon: 'folder',
           title: 'Автокопия в папку',
           sub: backupSub(backup),
@@ -133,15 +137,15 @@ defineRoute('settings', ({ scope }) => {
         'Библиотека',
         listItem({ icon: 'playlist', title: 'Перенос из Spotify и Яндекс Музыки', sub: 'По ссылке, списком или CSV', onClick: () => navigate('import') }),
       ),
-      group(
+      platform !== 'web' && group(
         'Сеть',
         listItem({ icon: 'storage', title: 'Прокси', sub: 'SOCKS5 / HTTP, пинг, переключение. Не работает при включённом VPN', onClick: () => navigate('proxy') }),
       ),
-      group('Моды', listItem({ icon: 'puzzle', title: 'Моды', sub: `${mods.value.filter((m) => m.state.enabled).length} включено`, onClick: () => navigate('mods') })),
+      phone && group('Моды', listItem({ icon: 'puzzle', title: 'Моды', sub: `${mods.value.filter((m) => m.state.enabled).length} включено`, onClick: () => navigate('mods') })),
       group(
         'О приложении',
-        listItem({ icon: 'info', title: 'You Music', sub: `Версия ${v.app} · NewPipeExtractor ${v.extractor}` }),
-        listItem({ icon: 'download', title: 'Обновления', sub: updateSub(), onClick: () => navigate('updates') }),
+        listItem({ icon: 'info', title: 'You Music', sub: phone ? `Версия ${v.app} · NewPipeExtractor ${v.extractor}` : `${platform === 'web' ? 'Веб-плеер' : 'Приложение для компьютера'} · версия ${v.app}` }),
+        phone && listItem({ icon: 'download', title: 'Обновления', sub: updateSub(), onClick: () => navigate('updates') }),
         listItem({ icon: 'export', title: 'Все релизы на GitHub', onClick: () => call('openUrl', { text: RELEASES_URL }) }),
       ),
     );

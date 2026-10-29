@@ -2289,3 +2289,21 @@ input[type='color']::-webkit-color-swatch {
 .btn-icon.dislike.on {
   color: var(--text);
 }
+
+/* ───────── Web player / desktop app on a wide screen ───────── */
+/* The body becomes the containing block of every fixed layer (player, sheets, toasts), so the whole app is one column. */
+@media (min-width: 760px) {
+  html.web {
+    background: var(--surface);
+  }
+
+  html.web body {
+    position: relative;
+    width: var(--shell-w);
+    height: 100vh;
+    margin: 0 auto;
+    overflow: hidden;
+    transform: translateZ(0);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+}

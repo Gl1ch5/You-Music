@@ -63,6 +63,8 @@
   --appbar-h: 56px;
   --progress: 2px;
   --progress-active: 6px;
+  /* Web player and desktop app on a wide screen: the phone-width column */
+  --shell-w: 480px;
 
   /* Motion */
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);

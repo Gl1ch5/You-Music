@@ -3,8 +3,8 @@ import type { ArgsOf, CommandName, NativeEvents, ResultOf } from './contract';
 
 /**
  * The only module that knows about the platform. In the app it talks to the `youBridge` object injected by
- * WebViewCompat.addWebMessageListener (allowed only for https://appassets.androidplatform.net); in a desktop
- * browser (`npm run dev`, screenshots) it falls back to an in-memory mock.
+ * WebViewCompat.addWebMessageListener (allowed only for https://appassets.androidplatform.net); in the web player
+ * and the desktop app it uses the HTTP backend (web.ts); in `npm run dev` and screenshots — an in-memory mock.
  */
 
 export class BridgeError extends Error {
@@ -47,6 +47,18 @@ function captureNative(): NativeObject | undefined {
 const native = captureNative();
 export const isNative = native !== undefined;
 
+/**
+ * Where the UI runs: the Android app, the web player / Windows-Linux app (`npm run build:web`, the Python backend
+ * marks the desktop app with `<html data-platform="desktop">`) or the mock (`npm run dev`, screenshots).
+ */
+export const platform: 'android' | 'web' | 'desktop' | 'mock' = native
+  ? 'android'
+  : import.meta.env.MODE === 'web'
+    ? document.documentElement.dataset.platform === 'desktop'
+      ? 'desktop'
+      : 'web'
+    : 'mock';
+
 const transport: Promise<Transport> = native
   ? Promise.resolve({
       send: (text) => native.postMessage(text),
@@ -54,7 +66,9 @@ const transport: Promise<Transport> = native
         native.onmessage = (ev) => cb(ev.data);
       },
     })
-  : import('./mock').then((m) => m.createMockTransport());
+  : import.meta.env.MODE === 'web'
+    ? import('./web').then((m) => m.createWebTransport())
+    : import('./mock').then((m) => m.createMockTransport());
 
 transport.then((t) =>
   t.listen((text) => {

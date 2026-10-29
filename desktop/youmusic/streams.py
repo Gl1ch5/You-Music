@@ -40,6 +40,14 @@ _cache: dict[str, tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
 
 
+def _js_runtime() -> str | None:
+    """YouTube's player challenges need a JS runtime (yt-dlp-ejs); without one some formats are refused."""
+    for name in ("deno", "node", "bun"):
+        if shutil.which(name):
+            return name
+    return None
+
+
 def resolve(video_id: str, fresh: bool = False) -> dict:
     """{url, headers, size, mime, ext, codec, abr, asr, channels}; cached until shortly before the URL expires."""
     if not re.fullmatch(r"[\w-]{6,20}", video_id):
@@ -52,6 +60,9 @@ def resolve(video_id: str, fresh: bool = False) -> dict:
     import yt_dlp  # heavy import, only when the first track plays
 
     opts = {"quiet": True, "no_warnings": True, "skip_download": True, "format": FORMAT, "noplaylist": True, "logger": _Quiet()}
+    runtime = _js_runtime()
+    if runtime:
+        opts["js_runtimes"] = {runtime: {}}
     if net.proxy:
         opts["proxy"] = net.proxy
     try:
@@ -59,7 +70,7 @@ def resolve(video_id: str, fresh: bool = False) -> dict:
             info = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
     except Exception as e:  # noqa: BLE001
         msg = str(e)
-        if "Sign in" in msg or "age" in msg.lower():
+        if "Sign in" in msg or "confirm your age" in msg.lower():
             raise StreamError("unavailable", "YouTube требует вход для этого видео") from e
         if "unavailable" in msg.lower() or "private" in msg.lower():
             raise StreamError("unavailable", "Видео недоступно") from e

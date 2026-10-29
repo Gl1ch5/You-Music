@@ -7,7 +7,7 @@ import { artistKey } from '../logic/normalize';
 import { slots } from '../mods/registry';
 import { artFor } from '../services/art';
 import { playTracks } from '../services/playback';
-import { call } from '../bridge/bridge';
+import { call, platform } from '../bridge/bridge';
 import { downloadLikes, notDownloaded } from '../services/library';
 import { cover, iconButton, sectionHead, trackRow } from '../ui/components';
 import { openTrackMenu } from '../ui/trackMenu';
@@ -68,7 +68,7 @@ defineRoute('collection', ({ scope }) => {
     replaceChildren(
       tiles,
       tile('playlist', 'Плейлисты', `${app.playlists.value.length}`, () => navigate('playlists')),
-      tile('download', 'Скачанное', tracksLabel(done), () => navigate('downloads')),
+      platform !== 'web' && tile('download', 'Скачанное', tracksLabel(done), () => navigate('downloads')),
       tile('folder', 'Мои файлы', tracksLabel(app.local.value.length), () => navigate('local')),
       tile('clock', 'История', played ? `Сегодня: ${tracksLabel(played)}` : 'Сегодня',  () => navigate('history')),
       tile('import', 'Перенос музыки', 'Spotify, Яндекс, списком', () => navigate('import'), true),

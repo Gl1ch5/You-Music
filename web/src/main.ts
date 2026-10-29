@@ -17,7 +17,7 @@ import './screens/account';
 
 import { goBack } from './app/router';
 import { mountShell } from './app/shell';
-import { call, onNative } from './bridge/bridge';
+import { call, onNative, platform } from './bridge/bridge';
 import { app } from './core/store';
 import { useIconSet } from './design/icons';
 import { loadMods } from './mods/host';
@@ -25,7 +25,7 @@ import { closePlayer, mountFullPlayer } from './player/full';
 import { mountMiniPlayer } from './player/mini';
 import { uiBus } from './services/events';
 import { initLibrary, refreshLibrary } from './services/library';
-import { initPlayback, restorePlayer } from './services/playback';
+import { initPlayback, next as playNext, restorePlayer, togglePlay } from './services/playback';
 import { loadSettings } from './services/settings';
 import { loadDislikes } from './services/dislikes';
 import { loadWaves } from './services/waves';
@@ -38,6 +38,19 @@ import { initUpdates } from './services/updates';
 import { loadThemes } from './theme/engine';
 import { handleBack, onBack } from './ui/back';
 import { initRowMarkers } from './ui/components';
+
+/** Web player and desktop app: a phone-width column on wide screens, media keys from the keyboard. */
+function initKeyboard(): void {
+  document.documentElement.classList.add('web');
+  window.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (e.ctrlKey || e.metaKey || e.altKey || t?.closest('input, textarea, [contenteditable]')) return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      togglePlay();
+    } else if (e.code === 'MediaTrackNext' || (e.shiftKey && e.code === 'ArrowRight')) playNext();
+  });
+}
 
 function applyInsets(i: { top: number; bottom: number }): void {
   app.insets.value = { ...app.insets.peek(), ...i };
@@ -73,6 +86,7 @@ async function boot(): Promise<void> {
     if (!handleBack()) call('moveToBack');
   });
   window.addEventListener('keydown', (e) => e.key === 'Escape' && (handleBack() || closePlayer()));
+  if (platform === 'web' || platform === 'desktop') initKeyboard();
 
   await Promise.all([refreshLibrary().catch(console.error), restorePlayer(), refreshAiConfig(), loadDislikes(), loadWaves()]);
   initUpdates();

@@ -72,6 +72,7 @@ GET_ROUTES = {
     "search": lambda q: ytm.search(q["q"], q.get("filter", "all"), q.get("page") or None),
     "suggest": lambda q: ytm.suggestions(q.get("q", "")),
     "track": lambda q: ytm.track_details(_video_id(q["id"])),
+    "radio": lambda q: [t for t in ytm.radio(_video_id(q["id"])) if t["id"] != q["id"]],
     "collection": lambda q: ytm.collection(q["url"]),
     "artist": lambda q: ytm.artist(q["url"]),
     "trackinfo": lambda q: streams.track_info(_video_id(q["id"]), cfg.downloads),
@@ -98,10 +99,36 @@ def _set_proxy(body: dict):
     url = (body.get("url") or "").strip() or None
     if url and not re.match(r"^(https?|socks5h?)://", url):
         raise extras.ApiError("bad_request", "Нужна ссылка вида http://host:port или socks5://host:port")
-    if cfg.platform != "desktop":
-        raise extras.ApiError("unavailable", "Прокси настраивается только в приложении")
+    _desktop_only()
     net.proxy = url
     streams._cache.clear()
+
+
+def _desktop_only() -> None:
+    if cfg.platform != "desktop":
+        raise extras.ApiError("unavailable", "Доступно только в приложении")
+
+
+def _open(body: dict):
+    """Links open in the system browser, not inside the app window."""
+    _desktop_only()
+    url = str(body.get("url") or "")
+    if not re.match(r"^(https?|tg|mailto):", url):
+        raise extras.ApiError("bad_request", "Эту ссылку нельзя открыть")
+    import webbrowser
+
+    webbrowser.open(url)
+
+
+def _ping(body: dict) -> int:
+    """Round trip to YouTube through a proxy, ms; -1 = it does not work."""
+    _desktop_only()
+    started = time.time()
+    try:
+        code, _ = net.get("https://www.youtube.com/generate_204", timeout=10, via=str(body.get("url") or ""))
+    except OSError:
+        return -1
+    return round((time.time() - started) * 1000) if code in (200, 204) else -1
 
 
 POST_ROUTES = {
@@ -111,6 +138,8 @@ POST_ROUTES = {
     "download": _download,
     "download-remove": _download_remove,
     "proxy": _set_proxy,
+    "open": _open,
+    "ping": _ping,
 }
 
 
@@ -231,7 +260,8 @@ class Handler(BaseHTTPRequestHandler):
         """Account server (sync, AI, Telegram): forwarded as is, the token stays in the Authorization header."""
         body = self._body() if method in ("POST", "PUT", "DELETE") else None
         headers = {"User-Agent": "YouMusic-" + cfg.platform}
-        for h in ("Authorization", "Content-Type"):
+        # X-Real-IP comes from nginx in front of the public web player: the account server rate-limits by it.
+        for h in ("Authorization", "Content-Type", "X-Real-IP"):
             if self.headers.get(h):
                 headers[h] = self.headers[h]
         req = urllib.request.Request(cfg.upstream.rstrip("/") + path, data=body, method=method, headers=headers)
@@ -262,6 +292,17 @@ class Handler(BaseHTTPRequestHandler):
         if ctype.startswith("text/") or ctype in ("application/javascript", "image/svg+xml"):
             ctype += "; charset=utf-8"
         hashed = "/assets/" in path
+        if file.name == "index.html":
+            # The UI tells the web player from the desktop app by this mark (web/src/bridge/bridge.ts).
+            html = file.read_bytes().replace(b'<html lang="ru">', f'<html lang="ru" data-platform="{cfg.platform}">'.encode(), 1)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(html)
+            return
         streams.serve_file(self, file, ctype, "public, max-age=31536000, immutable" if hashed else "no-cache")
 
 

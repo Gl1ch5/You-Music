@@ -1,5 +1,5 @@
 import { navigate } from '../app/router';
-import { call } from '../bridge/bridge';
+import { call, platform } from '../bridge/bridge';
 import type { Track } from '../bridge/contract';
 import { h, icon } from '../core/dom';
 import { app, likedIds } from '../core/store';
@@ -36,7 +36,7 @@ export function openTrackMenu(track: Track, extras: MenuExtras = {}): void {
   }
   if (track.source === 'yt') {
     actions.push({ icon: 'wave', label: 'Волна по треку', sub: 'Похожие по звучанию и настроению', run: () => playTrackWave(track) });
-    actions.push(
+    if (platform !== 'web') actions.push(
       dl
         ? { icon: 'trash', label: dl.status === 'done' ? 'Удалить загрузку' : 'Отменить загрузку', run: () => removeDownload(track.id) }
         : { icon: 'download', label: 'Скачать', run: () => download([track]) },
