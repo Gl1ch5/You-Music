@@ -146,7 +146,7 @@ function recommendationsSection(scope: Scope): HTMLElement {
   const reload = () => {
     replaceChildren(body, skeletonCards(4));
     loadRecommendations()
-      .then(({ tracks, from }) => {
+      .then((tracks) => {
         if (!tracks.length) {
           replaceChildren(body, h('div.pad.muted.small', null, 'Лайкните несколько треков — и здесь появятся рекомендации.'));
           return;
@@ -210,7 +210,7 @@ function chartPane(scope: Scope): HTMLElement {
     if (!online || loaded) return;
     loaded = true;
     loadChart()
-      .then((tracks) => {
+      .then(({ tracks, from }) => {
         if (!tracks.length) return replaceChildren(box, emptyState('chart', 'Чарт недоступен', 'Попробуйте позже.'));
         const ctx = { kind: 'list' as const, title: 'Чарт' };
         replaceChildren(
