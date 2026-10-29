@@ -222,6 +222,10 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     const i = tracks.findIndex((t) => t.id === id);
     return { track: tracks[i] ?? tracks[0], related: [...tracks.slice(i + 1), ...tracks.slice(0, i)].slice(0, 12) };
   },
+  trackRadio: ({ id }) => {
+    const i = tracks.findIndex((t) => t.id === id);
+    return [...tracks.slice(i + 1), ...tracks.slice(0, Math.max(0, i))].slice(0, 20);
+  },
   getCollection: ({ url }) => ({ collection: { kind: 'album', id: url, title: 'Northern Lights', subtitle: 'Lumen Fields', artwork: tracks[12].artwork, url, count: 8 }, tracks: tracks.slice(12, 20) }),
   getArtist: ({ url }) => {
     const t = tracks.find((x) => x.artistUrl === url) ?? tracks[0];

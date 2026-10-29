@@ -9,6 +9,7 @@ import app.youmusic.model.LyricsDto
 import app.youmusic.model.PaletteDto
 import app.youmusic.model.SearchPageDto
 import app.youmusic.model.TrackDetailsDto
+import app.youmusic.model.TrackDto
 import app.youmusic.source.FeatureQueryDto
 import app.youmusic.source.FeaturesRepository
 import app.youmusic.source.ImportRepository
@@ -40,6 +41,7 @@ class CatalogModule(
         command<SearchArgs, SearchPageDto>("search") { youtube.search(it.query, it.filter, it.page) }
         command<QueryArgs, List<String>>("searchSuggestions") { youtube.suggestions(it.query) }
         command<IdArgs, TrackDetailsDto>("trackDetails") { youtube.trackDetails(it.id.removePrefix("yt:")) }
+        command<IdArgs, List<TrackDto>>("trackRadio") { youtube.radio(it.id.removePrefix("yt:")) }
         command<UrlArgs, CollectionPageDto>("getCollection") { youtube.collection(it.url) }
         command<UrlArgs, ArtistPageDto>("getArtist") { youtube.artist(it.url) }
         command<LyricsArgs, LyricsDto>("lyrics") { lyrics.lyrics(it.artist, it.title, it.durationMs) }

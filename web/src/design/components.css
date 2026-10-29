@@ -1586,6 +1586,8 @@ input[type='color']::-webkit-color-swatch {
   border: 1px solid var(--line);
   overflow: hidden;
   display: grid;
+  /* One column no wider than the card: a long track name in the subtitle must ellipsize, not widen the column. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   isolation: isolate;
 }
@@ -1652,7 +1654,8 @@ input[type='color']::-webkit-color-swatch {
   gap: var(--s-2);
   padding: var(--s-6) var(--s-5);
   text-align: center;
-  max-width: 100%;
+  width: 100%;
+  min-width: 0;
 }
 
 .reco-center .play-btn {

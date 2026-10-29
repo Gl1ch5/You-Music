@@ -119,6 +119,21 @@ class YouTubeRepository {
         return TrackDetailsDto(track, related)
     }
 
+    /**
+     * YouTube Music's own radio for a track (the "RDAMVM" mix): an endless list of songs, not videos — what YouTube
+     * itself plays after the track. Falls back to the regular YouTube mix. Only the first page (≈25 songs).
+     */
+    fun radio(videoId: String): List<TrackDto> {
+        for (list in listOf("RDAMVM$videoId", "RD$videoId")) {
+            val tracks = runCatching { PlaylistInfo.getInfo(yt, "${watchUrl(videoId)}&list=$list").relatedItems }
+                .getOrNull().orEmpty()
+                .mapNotNull { it.toTrack(official = false) }
+                .filter { it.id != "yt:$videoId" }
+            if (tracks.isNotEmpty()) return tracks
+        }
+        return emptyList()
+    }
+
     fun collection(url: String): CollectionPageDto {
         val info = PlaylistInfo.getInfo(yt, url)
         val items = info.relatedItems.toMutableList()

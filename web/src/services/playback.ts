@@ -28,6 +28,12 @@ export const recoSource: RecoSource = {
   }),
   related,
   vibes: vibesOf,
+  filterSeeds: async (filters) => {
+    // The cached Yandex chart is Russian, popular and fresh: good seeds for exactly these filters.
+    if (!filters.some((f) => f === 'ru' || f === 'popular' || f === 'new')) return [];
+    const raw = await call('kvGet', { key: 'cache.chart' }).catch(() => null);
+    return raw ? ((JSON.parse(raw) as { tracks?: Track[] }).tracks ?? []) : [];
+  },
 };
 
 let wave: Wave | null = null;
@@ -35,18 +41,29 @@ let wave: Wave | null = null;
 let waveInfo: Omit<SavedWave, 'played' | 'at'> | null = null;
 
 /**
- * Recommendations: related songs of the user's taste, scored by vibe, era and filters — plus, when a model is
- * available (own or the account's), its suggestions mixed in. Custom text filters can only be understood by the model,
- * so with them on the wave plays the model's picks only.
+ * Whether the model takes part: a model must be available (own or the account's) and the user must have turned it
+ * on in settings — separately for "Рекомендации" and for waves by a track or a playlist.
+ */
+export function aiFor(kind: 'reco' | 'wave'): boolean {
+  const s = app.settings.peek();
+  return app.aiEnabled.peek() && (kind === 'reco' ? s.recoAi : s.waveAi);
+}
+
+function aiExtra(wish: string, basis?: Track[], title?: string): RecoSource['extra'] {
+  const s = app.settings.peek();
+  return async () => (await aiSuggest(recoSource, s.recoDepth === 'deep' ? 14 : 8, { mood: wish || undefined, tier: s.recoDepth, basis, title })).map((p) => p.track);
+}
+
+/**
+ * Recommendations: YouTube Music's radio around the user's taste, scored by vibe, era and filters — plus, when the
+ * model is on, its suggestions mixed in. Custom text filters can only be understood by the model, so with them on
+ * the wave plays the model's picks only.
  */
 export function createWave(opts: { seeds?: Track[]; seen?: Track[]; title?: string } = {}): Wave {
   const s = app.settings.peek();
-  const ai = app.aiEnabled.peek();
+  const ai = aiFor(opts.seeds ? 'wave' : 'reco');
   const custom = ai ? s.recoCustomActive : [];
-  const wish = describeFilters(s.recoFilters, custom);
-  const extra = ai
-    ? async () => (await aiSuggest(recoSource, s.recoDepth === 'deep' ? 14 : 8, { mood: wish || undefined, tier: s.recoDepth, basis: opts.seeds, title: opts.title })).map((p) => p.track)
-    : undefined;
+  const extra = ai ? aiExtra(describeFilters(s.recoFilters, custom), opts.seeds, opts.title) : undefined;
   return new Wave({ ...recoSource, extra }, s.waveMode, Math.random, null, {
     filters: s.recoFilters,
     depth: s.recoDepth,
@@ -112,7 +129,7 @@ async function startWave(): Promise<void> {
   let first = await current.next(8).catch(() => [] as Track[]);
   first = await runHooks(hooks.recommendations, first, { source: 'wave' });
   if (!first.length) {
-    if (app.settings.peek().recoFilters.length || app.settings.peek().recoCustomActive.length) {
+    if (app.settings.peek().recoFilters.length || (aiFor('reco') && app.settings.peek().recoCustomActive.length)) {
       return toast('С этими фильтрами ничего не нашлось — уберите часть', { icon: 'filter' });
     }
     const likes = app.likes.peek().map((l) => l.track);
@@ -145,7 +162,7 @@ export function resumeWave(saved: SavedWave): Promise<void> {
     if (!app.online.peek()) return toast('Нужна сеть', { icon: 'offline' });
     const current =
       saved.kind === 'track' && saved.seed
-        ? new Wave(recoSource, 'mix', Math.random, saved.seed, { seen: saved.played })
+        ? new Wave(trackWaveSource(saved.seed), 'mix', Math.random, saved.seed, { seen: saved.played })
         : createWave({ seeds: saved.seeds, seen: saved.played, title: saved.title });
     const first = await runHooks(hooks.recommendations, await current.next(8).catch(() => [] as Track[]), { source: 'wave' });
     if (!first.length) return toast('Эта волна закончилась — запустите новую', { icon: 'wave' });
@@ -156,14 +173,24 @@ export function resumeWave(saved: SavedWave): Promise<void> {
   });
 }
 
-/** Rebuilds what comes after the current track with the new filters / mode, keeping the song that plays. */
+/**
+ * Rebuilds what comes after the current track with the new filters / mode, keeping the song that plays, and says
+ * so. When nothing fits the new filters, the old queue stays rather than going silent.
+ */
 export async function restyleWave(): Promise<void> {
   if (!isWaveActive() || !wave || waveInfo?.kind === 'track') return;
+  const previous = wave;
   const current = createWave({ seeds: waveInfo?.seeds, seen: wave.played(), title: waveInfo?.title });
   wave = current;
-  const more = await runHooks(hooks.recommendations, await current.next(6).catch(() => [] as Track[]), { source: 'wave' });
+  const more = await busy(current.next(6).catch(() => [] as Track[]));
   if (wave !== current) return;
-  await call('queueReplaceUpcoming', { tracks: dedupeAgainstQueue(more, true) });
+  const tracks = dedupeAgainstQueue(await runHooks(hooks.recommendations, more, { source: 'wave' }), true);
+  if (!tracks.length) {
+    wave = previous;
+    return toast('С этими фильтрами ничего не нашлось — играет прежняя подборка', { icon: 'filter' });
+  }
+  await call('queueReplaceUpcoming', { tracks });
+  toast(`Дальше — с новыми фильтрами: ${tracks[0].artist} — ${tracks[0].title}`, { icon: 'filter' });
 }
 
 function saveWave(before: Track[] = []): void {
@@ -181,7 +208,7 @@ export function playTrackWave(seed: Track): Promise<void> {
 
 async function startTrackWave(seed: Track): Promise<void> {
   if (!app.online.peek() || seed.source !== 'yt') return toast('Волна по треку работает онлайн и для треков с YouTube', { icon: 'offline' });
-  const current = new Wave(recoSource, 'mix', Math.random, seed);
+  const current = new Wave(trackWaveSource(seed), 'mix', Math.random, seed);
   wave = current;
   const title = `Волна по «${seed.title}»`;
   const playing = currentTrack.peek()?.id === seed.id;
@@ -197,6 +224,11 @@ async function startTrackWave(seed: Track): Promise<void> {
   // One queue update for everything after the seed: no flicker of removing items one by one.
   if (playing) await call('queueReplaceUpcoming', { tracks: dedupeAgainstQueue(more, true) });
   else await call('queueAdd', { tracks: dedupeAgainstQueue(more) });
+}
+
+/** A wave by a track: its radio, plus the model's picks around it when that is turned on. */
+function trackWaveSource(seed: Track): RecoSource {
+  return aiFor('wave') ? { ...recoSource, extra: aiExtra('', [seed], `«${seed.title}» — ${seed.artist}`) } : recoSource;
 }
 
 /** Drops songs already in the queue (any upload of them), so a wave never repeats a track. */

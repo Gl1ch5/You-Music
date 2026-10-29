@@ -380,6 +380,8 @@ export interface Commands {
   search: [{ query: string; filter: SearchFilter; page?: string | null }, SearchPage];
   searchSuggestions: [{ query: string }, string[]];
   trackDetails: [{ id: string }, TrackDetails];
+  /** YouTube Music's radio (mix) for a track: songs only, without the track itself. */
+  trackRadio: [{ id: string }, Track[]];
   getCollection: [{ url: string }, CollectionPage];
   getArtist: [{ url: string }, ArtistPage];
   lyrics: [{ artist: string; title: string; durationMs: number }, Lyrics];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryEntry, Like, Track } from '../bridge/contract';
 import { artistKey } from './normalize';
-import { buildProfile, limitArtistRuns, newSession, scoreCandidates, selectTracks, Wave, type RecoSource } from './recommend';
+import { buildProfile, limitArtistRuns, looksLikeSong, newSession, scoreCandidates, selectTracks, Wave, type RecoSource } from './recommend';
 
 const NOW = 1_800_000_000_000;
 const t = (id: string, artist: string, title = id, durationMs = 200_000): Track => ({ id, source: 'yt', title, artist, durationMs });
@@ -132,5 +132,38 @@ describe('Wave vibe', () => {
     const first = await wave.next(2);
     expect(first.map((x) => x.id)).toEqual(['loud', 'soft']);
     expect(first.some((x) => x.id === 'seed')).toBe(false);
+  });
+});
+
+describe('looksLikeSong', () => {
+  const v = (title: string, extra: Partial<Track> = {}): Track => ({ id: 'yt:' + title, source: 'yt', title, artist: 'X', durationMs: 200_000, ...extra });
+  it('keeps songs', () => {
+    expect(looksLikeSong(v('Faded'))).toBe(true);
+    expect(looksLikeSong(v('Сансара', { views: 50_000_000 }))).toBe(true);
+    expect(looksLikeSong(v('Song', { views: 100, official: true }))).toBe(true);
+  });
+  it('drops videos that are not songs', () => {
+    expect(looksLikeSong(v('700 Subscribes Special video!'))).toBe(false);
+    expect(looksLikeSong(v('This SPINNING Bass Guitar Broke the Internet... so I played it.'))).toBe(false);
+    expect(looksLikeSong(v('GTA 4 Loading Screen Theme HD'))).toBe(false);
+    expect(looksLikeSong(v('Lofi beats 10 hours'))).toBe(false);
+    expect(looksLikeSong(v('Cologne (Healed Edition)', { views: 2 }))).toBe(false);
+    expect(looksLikeSong(v('Intro', { durationMs: 30_000 }))).toBe(false);
+  });
+});
+
+describe('Wave with filters', () => {
+  it('grows from songs that pass the filter: "Русское" with mostly English likes', async () => {
+    const en = Array.from({ length: 20 }, (_, i) => like(t(`en${i}`, `Artist ${i}`, `Song ${i}`), i));
+    const ru = [like(t('ru0', 'Баста', 'Сансара'), 30)];
+    const source: RecoSource = {
+      signals: async () => ({ likes: [...en, ...ru], history: [], now: NOW }),
+      // Related songs keep the seed's language, as YouTube's radio does.
+      related: async (seed) => Array.from({ length: 5 }, (_, i) => (/[а-я]/i.test(seed.artist) ? t(`${seed.id}-r${i}`, `Каста ${i}`, `Песня ${i}`) : t(`${seed.id}-r${i}`, `Band ${seed.id} ${i}`, `Track ${i}`))),
+    };
+    const wave = new Wave(source, 'mix', () => 0.5, null, { filters: ['ru'] });
+    const out = await wave.next(4);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((x) => /[а-я]/i.test(x.artist))).toBe(true);
   });
 });

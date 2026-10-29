@@ -7,7 +7,7 @@ import { app, currentTrack, player, type Settings } from '../core/store';
 import { RECO_FILTERS, toggleFilter } from '../logic/filters';
 import { hooks, runHooks } from '../mods/registry';
 import { adoptSourceMeta, findTrack, related } from '../services/catalog';
-import { createWave, isWaveActive, playTrackWave, playTracks, playWave, restyleWave, resumeWave, togglePlay } from '../services/playback';
+import { aiFor, createWave, isWaveActive, playTrackWave, playTracks, playWave, restyleWave, resumeWave, togglePlay } from '../services/playback';
 import { forgetWave, savedWaves } from '../services/waves';
 import { saveSettings } from '../services/settings';
 import { button, chip, emptyState, haptic, iconButton, playButton, sectionHead, skeletonCards, skeletonRows, trackCover, trackRow } from '../ui/components';
@@ -33,7 +33,7 @@ export function trackCard(track: Track, onClick: () => void): HTMLElement {
 
 /** Number of active filters (mode other than "Микс" counts too), shown on the "Фильтры" button. */
 function activeFilterCount(s: Settings): number {
-  return s.recoFilters.length + s.recoCustomActive.length + (s.waveMode === 'mix' ? 0 : 1);
+  return s.recoFilters.length + (aiFor('reco') ? s.recoCustomActive.length : 0) + (s.waveMode === 'mix' ? 0 : 1);
 }
 
 /**
@@ -84,6 +84,7 @@ function openFilters(): void {
   const body = h('div.filters-sheet');
   const addCustom = async () => {
     if (!app.aiEnabled.peek()) return toast('Свои фильтры понимает только нейросеть — подключите её в настройках или войдите в аккаунт', { icon: 'sparkle' });
+    if (!app.settings.peek().recoAi) return toast('Свои фильтры работают, когда включена «Нейросеть в рекомендациях» в настройках', { icon: 'sparkle' });
     const text = (await promptSheet({ title: 'Свой фильтр', placeholder: 'Например: грустное, для бега, 80-е', ok: 'Добавить' }))?.trim();
     if (!text) return;
     const s = app.settings.peek();
@@ -91,7 +92,7 @@ function openFilters(): void {
   };
   scope.effect(() => {
     const s = app.settings.value;
-    const ai = app.aiEnabled.value;
+    const ai = app.aiEnabled.value && s.recoAi;
     const group = (title: string, hint: string | null, ...items: (HTMLElement | HTMLElement[] | null)[]) =>
       h('div.filters-group', null, h('div.filters-title', null, title), hint ? h('div.small.muted', null, hint) : null, h('div.chips.wrap', null, ...items));
     replaceChildren(
@@ -100,7 +101,7 @@ function openFilters(): void {
       group('Подбор', 'Можно выбрать несколько', RECO_FILTERS.map((f) => chip(f.label, s.recoFilters.includes(f.id), () => void applyReco({ recoFilters: toggleFilter(app.settings.peek().recoFilters, f.id) })))),
       group(
         'Свои',
-        ai ? 'Опишите словами — поймёт нейросеть. Удерживайте, чтобы удалить.' : 'Свои фильтры работают с нейросетью.',
+        ai ? 'Опишите словами — поймёт нейросеть. Удерживайте, чтобы удалить.' : 'Свои фильтры работают, когда в настройках включена нейросеть в рекомендациях.',
         ai
           ? s.recoCustom.map((text) => {
               const c = chip(text, s.recoCustomActive.includes(text), () => {

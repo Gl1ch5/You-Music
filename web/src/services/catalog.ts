@@ -57,13 +57,24 @@ export async function artist(url: string): Promise<ArtistPage> {
 
 const relatedCache = new Map<string, Promise<Track[]>>();
 
-/** Related tracks of a YouTube track (used by recommendations and the "Похожие" tab). Cached for the session. */
+/**
+ * Related songs of a YouTube track (used by recommendations and the "Похожие" tab): YouTube Music's own radio
+ * for it first — songs only, what YouTube itself would play next — then the video's "related" list, which
+ * mixes in non-music videos (the wave drops those). Cached for the session.
+ */
 export function related(track: Track): Promise<Track[]> {
   if (track.source !== 'yt') return Promise.resolve([]);
   let p = relatedCache.get(track.id);
   if (!p) {
-    p = call('trackDetails', { id: track.id })
-      .then((d) => d.related.map(normalizeTrack))
+    const radio = call('trackRadio', { id: track.id }).catch(() => [] as Track[]);
+    const videos = call('trackDetails', { id: track.id }).then((d) => d.related);
+    p = Promise.allSettled([radio, videos])
+      .then(([r, v]) => {
+        const list = [...(r.status === 'fulfilled' ? r.value : []), ...(v.status === 'fulfilled' ? v.value : [])];
+        if (!list.length && v.status === 'rejected') throw v.reason;
+        const ids = new Set<string>();
+        return list.filter((t) => t.id !== track.id && !ids.has(t.id) && !!ids.add(t.id)).map(normalizeTrack);
+      })
       .catch((e) => {
         relatedCache.delete(track.id);
         throw e;

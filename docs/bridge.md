@@ -60,6 +60,7 @@
 | `search` | `{query, filter: all\|songs\|videos\|albums\|artists\|playlists, page?}` | `SearchPage` |
 | `searchSuggestions` | `{query}` | `string[]` |
 | `trackDetails` | `{id}` | `{track, related}` |
+| `trackRadio` | `{id}` | `Track[]` — радио YouTube Music по треку (микс `RDAMVM<id>`, запасной — `RD<id>`), первая страница ≈25 песен без самого трека; основа рекомендаций и волн |
 | `getCollection` / `getArtist` | `{url}` | `CollectionPage` / `ArtistPage` |
 | `lyrics` | `{artist, title, durationMs}` | `{plain?, synced?}` (LRCLIB: точный запрос, затем поиск по очищенному названию, ближайший по длительности, синхронный текст в приоритете) |
 | `translate` | `{lines, to}` | `{lines, from?}` — перевод текста песни построчно (Google Translate без ключа), строки совпадают с оригиналом |

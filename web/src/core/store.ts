@@ -16,6 +16,10 @@ export interface Settings {
   waveMode: 'mix' | 'familiar' | 'discover';
   /** Fast: fewer lookups and the quick model; deep: more candidates checked and the stronger model. */
   recoDepth: 'fast' | 'deep';
+  /** The model adds its picks to "Рекомендации" (and follows the user's own text filters). Off by default. */
+  recoAi: boolean;
+  /** The model adds its picks to waves by a track or a playlist. Off by default. */
+  waveAi: boolean;
   recoFilters: RecoFilter[];
   /** The user's own filters in words ("грустное", "для бега"); only the model can follow them. */
   recoCustom: string[];
@@ -38,6 +42,8 @@ export const defaultSettings: Settings = {
   iconStyle: 'theme',
   waveMode: 'mix',
   recoDepth: 'fast',
+  recoAi: false,
+  waveAi: false,
   recoFilters: [],
   recoCustom: [],
   recoCustomActive: [],

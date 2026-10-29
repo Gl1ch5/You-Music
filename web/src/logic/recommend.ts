@@ -36,6 +36,8 @@ export interface RecoSource {
   extra?(alreadyDelivered: Track[]): Promise<Track[]>;
   /** Optional audio "vibe" per track id (missing = unknown). */
   vibes?(tracks: Track[]): Promise<Map<string, Vibe | null>>;
+  /** Optional songs that fit the filters by themselves (e.g. the Russian chart for "Русское"): seeds when the taste has few. */
+  filterSeeds?(filters: RecoFilter[]): Promise<Track[]>;
 }
 
 /** How many top candidates get their vibe looked up per step, and how much it can move a score. */
@@ -131,6 +133,21 @@ export function pickSeeds({ likes, history }: RecoSignals, count: number, rng: (
   return out;
 }
 
+/** Titles of uploads that are videos about music (or not about it at all), not songs to put on. */
+const NOT_A_SONG =
+  /subscri|подписчик|special video|\breact(ion|s|ing)?\b|реакци|tutorial|\blesson\b|урок|how to|как (сделать|играть)|gameplay|walkthrough|прохождени|trailer|трейлер|teaser|тизер|podcast|подкаст|interview|интервью|unboxing|распаковк|обзор|\breview\b|\bvlog\b|влог|#shorts|\bi played\b|played it|broke the internet|loading screen|\bfull album\b|альбом целиком|\b\d+\s*(hours?|hrs?)\b|\d+\s*час/i;
+
+/**
+ * Whether a candidate looks like a song rather than a random video: YouTube's "related" list mixes in vlogs,
+ * reactions and hour-long compilations. Unknown views or duration do not count against it.
+ */
+export function looksLikeSong(track: Track): boolean {
+  const ms = track.durationMs;
+  if (ms > 0 && (ms < 60_000 || ms > 12 * 60_000)) return false;
+  if (!track.official && track.views != null && track.views < 3000) return false;
+  return !NOT_A_SONG.test(track.title);
+}
+
 export interface Candidate {
   track: Track;
   seedId: string;
@@ -199,7 +216,7 @@ export function selectTracks(scored: Scored[], profile: Profile, session: Sessio
         !known(profile.blockedKeys) &&
         !session.seenIds.has(track.id) &&
         !known(session.seenKeys) &&
-        track.durationMs < 15 * 60_000
+        looksLikeSong(track)
       );
     })
     .map((s) => ({ ...s, score: s.score - (session.artistPenalty.get(artistKey(s.track.artist)) ?? 0) }))
@@ -351,10 +368,44 @@ export class Wave {
     } else {
       this.seedQueue = pickSeeds(this.signalsCache, 12, this.rng);
     }
+    if (!this.seed && this.filters.length) this.seedQueue = await this.fitSeeds(this.seedQueue);
     // Continuing a wave: grow from where it stopped.
     if (!this.seed && this.options.seen?.length) this.seedQueue.unshift(...this.options.seen.slice(-4).map((track) => ({ track, liked: false })));
     // The target vibe is only needed for the final scoring: load it while the candidates are fetched.
     this.targetLoad = this.loadTarget().catch(() => undefined);
+  }
+
+  /**
+   * With filters on, the wave grows from songs that already pass them: related songs of an English track are
+   * rarely Russian, so seeds from the whole taste (and the source's filter seeds when the taste has few) go first.
+   */
+  private async fitSeeds(seeds: { track: Track; liked: boolean }[]): Promise<{ track: Track; liked: boolean }[]> {
+    const year = new Date(this.signalsCache?.now ?? Date.now()).getFullYear();
+    const fits = (t: Track) => filterScore(t, null, this.filters, year) != null;
+    const signals = this.signalsCache!;
+    const pool = this.options.seeds?.length
+      ? seeds
+      : [...seeds, ...signals.likes.map((l) => ({ track: l.track, liked: true })), ...signals.history.filter((h) => h.completed).map((h) => ({ track: h.track, liked: false }))];
+    const seen = new Set<string>();
+    const good: { track: Track; liked: boolean }[] = [];
+    for (const s of pool) {
+      if (seen.has(s.track.id) || !fits(s.track)) continue;
+      seen.add(s.track.id);
+      good.push(s);
+    }
+    for (let i = good.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [good[i], good[j]] = [good[j], good[i]];
+    }
+    if (good.length < 6 && this.source.filterSeeds) {
+      const extra = await this.source.filterSeeds(this.filters).catch(() => [] as Track[]);
+      for (const track of extra) {
+        if (seen.has(track.id) || !fits(track)) continue;
+        seen.add(track.id);
+        good.push({ track, liked: true });
+      }
+    }
+    return [...good.slice(0, 16), ...seeds.filter((s) => !seen.has(s.track.id))];
   }
 
   /** Target vibe and era: the seed track's, the playlist's, or those of the freshest likes and finished plays. */
@@ -379,13 +430,14 @@ export class Wave {
    */
   private async withVibe(scored: Scored[]): Promise<Scored[]> {
     const filters = this.filters;
-    if (!this.source.vibes || (!this.target && !this.era && !filters.length)) return scored;
+    if (!this.target && !this.era && !filters.length) return scored;
+    // Filters apply even without audio data: language and views are judged from the track itself.
     const top = [...scored]
       .sort((a, b) => b.score - a.score)
       .slice(0, filters.length || this.options.depth === 'deep' ? VIBE_TOP_FILTERED : VIBE_TOP)
       .map((s) => s.track);
-    const unknown = top.filter((t) => !this.vibes.has(t.id));
-    if (unknown.length) {
+    const unknown = this.source.vibes ? top.filter((t) => !this.vibes.has(t.id)) : [];
+    if (unknown.length && this.source.vibes) {
       const map = await this.source.vibes(unknown).catch(() => new Map<string, Vibe | null>());
       unknown.forEach((t) => this.vibes.set(t.id, map.get(t.id) ?? null));
     }
