@@ -1,5 +1,5 @@
-import { h } from '../core/dom';
-import { platform } from '../bridge/bridge';
+import { h, setIcon } from '../core/dom';
+import { call, platform } from '../bridge/bridge';
 import { Scope } from '../core/signal';
 import { currentTrack, livePosition, player } from '../core/store';
 import { artFor } from '../services/art';
@@ -28,7 +28,7 @@ export function mountMiniPlayer(): HTMLElement {
   if (wide) {
     const seekBar = progressBar(scope, (ms) => seek(ms));
     parts = [
-      h('div.mini-side', null, like, iconButton('queue', 'Очередь', () => openQueue(), 'mini-extra'), iconButton('chevron-up', 'Открыть плеер', () => openPlayer(), 'mini-extra')),
+      h('div.mini-side', null, like, volumeControl(), iconButton('queue', 'Очередь', () => openQueue(), 'mini-extra'), iconButton('chevron-up', 'Открыть плеер', () => openPlayer(), 'mini-extra')),
       h(
         'div.mini-center',
         null,
@@ -85,7 +85,7 @@ export function mountMiniPlayer(): HTMLElement {
   let dragged = false;
 
   el.addEventListener('pointerdown', (e) => {
-    if ((e.target as HTMLElement).closest('button, .mini-seek')) return;
+    if ((e.target as HTMLElement).closest('button, .mini-seek, .mini-vol')) return;
     startX = e.clientX;
     startY = e.clientY;
     startT = performance.now();
@@ -143,8 +143,84 @@ export function mountMiniPlayer(): HTMLElement {
   // Open on `click`, not on pointerup: hiding the mini player before the click is dispatched would let that
   // click land on the track row underneath and start it.
   el.addEventListener('click', (e) => {
-    if (dragged || (e.target as HTMLElement).closest('button, .mini-seek')) return;
+    if (dragged || (e.target as HTMLElement).closest('button, .mini-seek, .mini-vol')) return;
     openPlayer();
   });
+  return el;
+}
+
+const VOLUME_KEY = 'player.volume';
+
+/**
+ * Volume for the bottom player bar (web player and desktop app): mute button + slider, the wheel works over both.
+ * The level lives in kv `player.volume` as `{level, muted}`; the slider is linear, the player gets level² (sounds even).
+ */
+function volumeControl(): HTMLElement {
+  let level = 0.8;
+  let muted = false;
+  const btn = iconButton('volume', 'Без звука', () => {
+    if (muted || level === 0) {
+      muted = false;
+      if (level === 0) level = 0.5;
+    } else muted = true;
+    apply(true);
+  }, 'mini-extra');
+  const fill = h('div.progress-fill');
+  const thumb = h('div.progress-thumb');
+  const bar = h('div.progress', { attrs: { role: 'slider', 'aria-label': 'Громкость', 'aria-valuemin': '0', 'aria-valuemax': '100' } }, h('div.progress-track', null, fill), thumb);
+  const el = h('div.mini-vol', null, btn, bar);
+
+  const apply = (save: boolean) => {
+    const shown = muted ? 0 : level;
+    fill.style.transform = `scaleX(${shown})`;
+    thumb.style.translate = `${shown * bar.clientWidth}px 0`;
+    bar.setAttribute('aria-valuenow', String(Math.round(shown * 100)));
+    const svg = btn.querySelector('svg');
+    if (svg) setIcon(svg, shown === 0 ? 'volume-off' : shown < 0.5 ? 'volume-low' : 'volume');
+    btn.setAttribute('aria-label', muted ? 'Включить звук' : 'Без звука');
+    btn.title = btn.getAttribute('aria-label')!;
+    void call('setVolume', { volume: shown * shown }).catch(() => undefined);
+    if (save) void call('kvSet', { key: VOLUME_KEY, value: JSON.stringify({ level, muted }) }).catch(() => undefined);
+  };
+  const set = (v: number, save: boolean) => {
+    level = Math.min(1, Math.max(0, v));
+    muted = false;
+    apply(save);
+  };
+  const at = (e: PointerEvent) => {
+    const r = bar.getBoundingClientRect();
+    return (e.clientX - r.left) / r.width;
+  };
+  let dragging = false;
+  bar.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    bar.setPointerCapture(e.pointerId);
+    bar.classList.add('active');
+    set(at(e), false);
+  });
+  bar.addEventListener('pointermove', (e) => dragging && set(at(e), false));
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    bar.classList.remove('active');
+    apply(true);
+  };
+  bar.addEventListener('pointerup', end);
+  bar.addEventListener('pointercancel', end);
+  el.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    set((muted ? 0 : level) - Math.sign(e.deltaY) * 0.05, true);
+  }, { passive: false });
+  // The thumb is placed in pixels: re-place it once the bar has a width (and when the window is resized).
+  new ResizeObserver(() => apply(false)).observe(bar);
+
+  void call('kvGet', { key: VOLUME_KEY })
+    .then((raw) => {
+      const saved = raw ? (JSON.parse(raw) as { level?: number; muted?: boolean }) : null;
+      if (typeof saved?.level === 'number') level = Math.min(1, Math.max(0, saved.level));
+      muted = !!saved?.muted;
+    })
+    .catch(() => undefined)
+    .finally(() => apply(false));
   return el;
 }

@@ -374,6 +374,8 @@ export interface Commands {
   queueClear: [None, void];
   setRepeat: [{ mode: RepeatMode }, void];
   setShuffle: [{ enabled: boolean }, void];
+  /** Player volume 0…1 (the app's own level, on top of the system one). The UI keeps it in kv `player.volume`. */
+  setVolume: [{ volume: number }, void];
   getPlayerState: [None, PlayerState];
   trackInfo: [{ track: Track }, TrackInfo];
 

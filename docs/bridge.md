@@ -60,6 +60,7 @@
 | `queueMove` | `{from, to}` | — |
 | `queueReplaceUpcoming` | `{tracks}` | — (заменяет всё после текущего трека одним изменением очереди) |
 | `setRepeat`, `setShuffle` | `{mode: off\|all\|one}` / `{enabled}` | — |
+| `setVolume` | `{volume}` (0…1) | — (громкость самого плеера поверх системной; UI хранит её в kv `player.volume`, ползунок — только в нижней панели веб-версии и ПК) |
 | `getPlayerState` | — | `PlayerState` |
 | `trackInfo` | `{track}` | `TrackInfo` — откуда играет (`download\|cache\|stream\|local`), контейнер, кодек, битрейт, частота, размер |
 | **Каталог (YouTube)** | | |

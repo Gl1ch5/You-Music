@@ -826,6 +826,9 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     }
     emitState();
   },
+  setVolume: ({ volume }) => {
+    audio.volume = Math.min(1, Math.max(0, volume));
+  },
   getPlayerState: () => ({ queue, index, playing: wantPlay, buffering: buffering(), positionMs: pendingRestore ?? Math.round(audio.currentTime * 1000), durationMs: durationMs(), repeat, shuffle: shuffleOn }),
   trackInfo: async ({ track }) => {
     if (track.source === 'local') {

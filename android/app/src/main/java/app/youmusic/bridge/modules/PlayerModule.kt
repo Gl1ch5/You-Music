@@ -17,6 +17,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class TrackArgs(val track: TrackDto)
 @Serializable data class RepeatArgs(val mode: String)
 @Serializable data class ShuffleArgs(val enabled: Boolean)
+@Serializable data class VolumeArgs(val volume: Double)
 
 class PlayerModule(private val player: PlayerController, private val info: app.youmusic.player.TrackInfoReader) : BridgeModule {
     override fun register(registry: CommandRegistry) = with(registry) {
@@ -46,6 +47,7 @@ class PlayerModule(private val player: PlayerController, private val info: app.y
         command<NoArgs, Unit>("queueClear") { player.withPlayer { p -> p.clearMediaItems() } }
         command<RepeatArgs, Unit>("setRepeat") { a -> player.withPlayer { p -> p.repeatMode = PlayerController.repeatMode(a.mode) } }
         command<ShuffleArgs, Unit>("setShuffle") { a -> player.withPlayer { p -> p.shuffleModeEnabled = a.enabled } }
+        command<VolumeArgs, Unit>("setVolume") { a -> player.withPlayer { p -> p.volume = a.volume.toFloat().coerceIn(0f, 1f) } }
         command<NoArgs, PlayerStateDto>("getPlayerState") { player.state() }
         command<TrackArgs, app.youmusic.player.TrackInfoDto>("trackInfo") { info.info(it.track) }
     }

@@ -200,6 +200,7 @@ const handlers: { [K in keyof Commands]?: (args: Commands[K][0]) => Commands[K][
     shuffle = enabled;
     state();
   },
+  setVolume: () => undefined,
   trackInfo: ({ track }) => ({ source: downloads.has(track.id) ? 'download' : 'stream', container: 'webm', codec: 'Opus', bitrateKbps: 160, sampleRateHz: 48000, channels: 2, sizeBytes: Math.round((track.durationMs / 1000) * 20_000) }),
   getPlayerState: () => ({ queue, index, playing, buffering: false, positionMs: position, durationMs: queue[index]?.durationMs ?? 0, repeat, shuffle }),
 

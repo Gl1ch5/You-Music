@@ -2299,7 +2299,8 @@ input[type='color']::-webkit-color-swatch {
 /* The mini player's extra controls (prev/next, seek, queue) exist only in web builds and show only on a wide window. */
 .nav-brand,
 .mini-extra,
-.mini-seek {
+.mini-seek,
+.mini-vol {
   display: none;
 }
 
@@ -2310,7 +2311,7 @@ input[type='color']::-webkit-color-swatch {
 }
 
 /* Wide window: sidebar instead of the tab bar, the mini player becomes a full-width player bar,
-   content is centred in a readable column, the full player is two columns, sheets are dialogs. */
+   content is centred in a readable column, the full player is one centred column, sheets are dialogs. */
 @media (min-width: 900px) {
   html.web {
     --nav-h: 0px;
@@ -2482,61 +2483,53 @@ input[type='color']::-webkit-color-swatch {
     place-items: center;
   }
 
-  /* Full player: cover (or lyrics) on the left, track and controls on the right */
+  /* Full player: one centred column, as on the phone but roomier — the cover takes the height that is left,
+     track, seek bar and controls sit under it in a column no wider than the cover. */
   html.web .player-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
-    grid-template-rows: auto 1fr repeat(6, auto) 1fr;
-    column-gap: var(--s-8);
-    width: 100%;
-    max-width: var(--content-w);
-    margin: 0 auto;
-    padding: var(--s-3) var(--s-6) var(--s-6);
+    padding: var(--s-3) var(--s-6) var(--s-5);
   }
 
-  html.web .player-head {
-    grid-column: 1 / -1;
-    grid-row: 1;
+  html.web .player-body > :not(.player-head) {
+    align-self: center;
+    width: min(100%, 520px);
+  }
+
+  html.web .player-body > .progress,
+  html.web .player-body > .times {
+    width: min(100% - var(--s-6), 520px - var(--s-6));
   }
 
   html.web .player-art {
-    grid-column: 1;
-    grid-row: 2 / -1;
-    margin: var(--s-4) 0 0;
-    align-self: stretch;
+    flex: 1 1 0;
+    margin: var(--s-3) 0 var(--s-5);
   }
 
   html.web .player-art .art-frame {
-    width: min(100%, 62vh);
-  }
-
-  html.web .player-body > :not(.player-head, .player-art) {
-    grid-column: 2;
-  }
-
-  html.web .player-meta {
-    grid-row: 3;
-  }
-
-  html.web .player-body > .progress {
-    grid-row: 4;
-  }
-
-  html.web .player-body > .times {
-    grid-row: 5;
+    width: auto;
+    height: 100%;
+    max-width: 100%;
+    max-height: 520px;
   }
 
   html.web .player-controls {
-    grid-row: 6;
-  }
-
-  html.web .player-pills {
-    grid-row: 7;
+    justify-content: center;
+    gap: var(--s-5);
   }
 
   html.web .wave-banner {
-    grid-row: 8;
-    margin-top: var(--s-5);
+    margin-top: var(--s-4);
+  }
+
+  /* Volume in the player bar */
+  html.web .mini-vol {
+    display: flex;
+    align-items: center;
+    width: 140px;
+  }
+
+  html.web .mini-vol .progress {
+    flex: 1;
+    height: 20px;
   }
 
   /* Sheets become centred dialogs */
