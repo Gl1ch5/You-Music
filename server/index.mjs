@@ -329,14 +329,26 @@ const paramRoutes = [
 function stats() {
   const day = today();
   const users = Object.values(db.users);
-  const weekAgo = Date.now() - 7 * 86400_000;
+  const now = Date.now();
+  const since = (ms) => (t) => (t ?? 0) > now - ms;
+  // Accounts at the end of each of the last 30 days, for the growth chart.
+  const growth = [];
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  for (let i = 29; i >= 0; i--) {
+    const end = start.getTime() - (i - 1) * 86400_000;
+    growth.push(users.filter((u) => (u.createdAt ?? 0) < end).length);
+  }
   return {
     users: users.length,
-    activeWeek: users.filter((u) => (u.seenAt ?? 0) > weekAgo).length,
+    newToday: users.filter((u) => since(86400_000)(u.createdAt)).length,
+    newWeek: users.filter((u) => since(7 * 86400_000)(u.createdAt)).length,
+    activeDay: users.filter((u) => since(86400_000)(u.seenAt)).length,
+    activeWeek: users.filter((u) => since(7 * 86400_000)(u.seenAt)).length,
     synced: users.filter((u) => u.syncedAt).length,
     aiToday: db.stats.aiDays[day] ?? 0,
     aiTotal: Object.values(db.stats.aiDays).reduce((a, b) => a + b, 0),
     tgTracks: Object.values(db.tg.tracks).reduce((a, l) => a + l.length, 0),
+    growth,
     ai: !!(AI_BASE && AI_MODEL),
     proxy: !!PROXY_HOST,
     telegram: !!TG_TOKEN,
@@ -346,44 +358,130 @@ function stats() {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function sendHtml(res, html) {
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'content-security-policy': "default-src 'none'; img-src https://i.ytimg.com; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" });
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'content-security-policy': "default-src 'none'; img-src 'self' https://i.ytimg.com; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" });
   res.end(html);
 }
 
 const RELEASES = 'https://github.com/Gl1ch5/You-Music/releases/latest';
+const NIGHTLY = 'https://github.com/Gl1ch5/You-Music/releases/download/nightly';
 
-function page(title, body, head = '') {
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${head}
+/** Inline SVG icons for the site (24px grid, stroke 1.5, currentColor — like the app). */
+const ICONS = {
+  play: '<path d="M8 5.5v13l10.5-6.5z"/>',
+  android: '<path d="M7 10h10v7.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 7 17.5zM7 9a5 5 0 0 1 10 0M9.5 6.5 8 4.5m6.5 2 1.5-2M4.5 11v4.5m15-4.5v4.5"/>',
+  windows: '<path d="M4 6.5 10.5 5.6v5.9H4zm0 11L10.5 18.4v-5.9H4zm7.5-12 8.5-1.2v7.2h-8.5zm0 13 8.5 1.2v-7.2h-8.5z"/>',
+  linux: '<path d="M12 3.5c-2 0-3 1.7-3 4 0 1.5-.6 2.6-1.6 4.1C6.3 13.2 5.5 15 6 16.6M12 3.5c2 0 3 1.7 3 4 0 1.5.6 2.6 1.6 4.1 1.1 1.6 1.9 3.4 1.4 5M8 20.5c1.2-.6 2.6-.9 4-.9s2.8.3 4 .9M10.5 8h.01M13.5 8h.01M11 10.5h2"/>',
+  telegram: '<path d="M20.5 4.5 3.5 11l5.5 2 2 6 3-3.5 4.5 3.5zM9 13l8-5.5"/>',
+  wave: '<path d="M3 12h2m2-4v8m4-11v14m4-10v6m4-3h2"/>',
+  lyrics: '<path d="M4 6h11M4 10h16M4 14h9M4 18h13"/>',
+  download: '<path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19.5h14"/>',
+  swap: '<path d="M7 7h12l-3.5-3.5M17 17H5l3.5 3.5"/>',
+  palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.5-.7 1.5-1.5s-.6-1.2-.6-2 .6-1.5 1.6-1.5h2a4 4 0 0 0 4-4c0-4.4-3.8-8-8.5-8z"/><circle cx="8" cy="11" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/>',
+  cloud: '<path d="M7 18.5a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.5 1.5 3.75 3.75 0 0 1-.4 7.5z"/>',
+};
+const ico = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+
+function page(title, body, { head = '', wide = false } = {}) {
+  const icon = `${PREFIX}/app/icons/icon-192.png`;
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<link rel="icon" type="image/png" sizes="32x32" href="${PREFIX}/app/icons/icon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="${icon}"><link rel="apple-touch-icon" href="${PREFIX}/app/icons/apple-touch.png">
+<meta name="theme-color" content="#0b0c10"><meta property="og:title" content="${esc(title)}"><meta property="og:image" content="https://grzxk.ru${PREFIX}/app/icons/icon-512.png">${head}
 <style>
-:root{--bg:#0e0f11;--surface:#17191c;--text:#eceef1;--text-2:#9aa0a8;--accent:#e9e2d6;--line:#2a2d32;color-scheme:dark}
-@media (prefers-color-scheme:light){:root{--bg:#f5f4f1;--surface:#fff;--text:#16181b;--text-2:#5d636b;--accent:#16181b;--line:#e2e0db;color-scheme:light}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:720px;margin:0 auto;padding:40px 16px 64px}h1{font-size:32px;line-height:1.15;margin:0 0 8px;letter-spacing:-.02em}h2{font-size:20px;margin:32px 0 8px}
-p{color:var(--text-2);margin:0 0 12px}a{color:var(--text)}.btn{display:inline-block;padding:12px 20px;border-radius:999px;background:var(--accent);color:var(--bg);text-decoration:none;font-weight:600;margin:8px 8px 0 0}
-.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
-.stat{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px}.stat b{display:block;font-size:28px;font-variant-numeric:tabular-nums}.stat span{color:var(--text-2);font-size:14px}
-img.cover{width:100%;max-width:360px;aspect-ratio:1;object-fit:cover;border-radius:20px;display:block;margin:0 0 20px}li{color:var(--text-2);margin-bottom:6px}footer{margin-top:48px;font-size:14px;color:var(--text-2)}
-</style></head><body><main>${body}<footer><a href="./">You Music</a> · <a href="./terms">Соглашение</a> · <a href="https://github.com/Gl1ch5/You-Music">Исходный код</a></footer></main></body></html>`;
+:root{--bg:#0b0c10;--surface:#14161c;--surface-2:#1b1e26;--text:#eef0f4;--text-2:#9aa1ad;--accent:#7ea6ff;--accent-2:#b48cff;--on-accent:#0b0c10;--line:#262a33;--glow:rgba(110,140,255,.22);color-scheme:dark}
+@media (prefers-color-scheme:light){:root{--bg:#f6f6f9;--surface:#fff;--surface-2:#f0f1f6;--text:#14161b;--text-2:#5c6370;--accent:#3d6bff;--accent-2:#8a4dff;--on-accent:#fff;--line:#e3e5ec;--glow:rgba(70,110,255,.16);color-scheme:light}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:-20vh -20vw auto;height:80vh;background:radial-gradient(40% 50% at 30% 30%,var(--glow),transparent 70%),radial-gradient(35% 45% at 75% 20%,rgba(180,140,255,.14),transparent 70%);pointer-events:none;z-index:-1}
+main{max-width:${wide ? 1040 : 720}px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:clamp(34px,6vw,56px);line-height:1.05;margin:0 0 14px;letter-spacing:-.03em}h2{font-size:24px;letter-spacing:-.01em;margin:56px 0 16px}
+p{color:var(--text-2);margin:0 0 12px}a{color:var(--text)}
+.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none;margin-bottom:48px}.brand img{width:36px;height:36px;border-radius:10px}
+.grad{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(17px,2.2vw,20px);max-width:620px}
+.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:32px;align-items:center}
+.hero-art{justify-self:center;width:min(280px,70vw);aspect-ratio:1;border-radius:22.5%;box-shadow:0 30px 80px var(--glow),0 0 0 1px var(--line);animation:float 6s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-10px) rotate(-2deg)}}
+@media (prefers-reduced-motion:reduce){.hero-art{animation:none}}
+@media (max-width:760px){.hero{grid-template-columns:1fr}.hero-art{grid-row:1;width:140px}.brand{margin-bottom:28px}}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:999px;background:var(--accent);color:var(--on-accent);text-decoration:none;font-weight:600;transition:transform .12s,opacity .12s}
+.btn:hover{transform:translateY(-1px)}.btn:active{transform:scale(.97)}
+.btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px}
+.stat b{display:block;font-size:34px;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}.stat span{color:var(--text-2);font-size:14px}
+.stat small{display:inline-block;margin-top:6px;font-size:13px;color:var(--accent);font-weight:600}
+.chart{margin-top:12px;padding:18px 18px 10px}.chart svg{display:block;width:100%;height:160px}.chart .row{display:flex;justify-content:space-between;color:var(--text-2);font-size:13px}
+.feat .i{width:28px;height:28px;color:var(--accent);margin-bottom:10px}.feat h3{margin:0 0 4px;font-size:17px}.feat p{margin:0;font-size:15px}
+.dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px}.grid.three{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.dl a{display:flex;align-items:center;gap:14px;text-decoration:none}.dl .i{width:30px;height:30px;color:var(--accent)}.dl b{display:block}.dl span{color:var(--text-2);font-size:14px}
+.dl a:hover{border-color:var(--accent)}
+img.cover{width:100%;max-width:360px;aspect-ratio:1;object-fit:cover;border-radius:20px;display:block;margin:0 0 20px}li{color:var(--text-2);margin-bottom:6px}
+footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:14px;color:var(--text-2)}footer a{color:var(--text-2)}
+</style></head><body><main><a class="brand" href="${PREFIX}/"><img src="${icon}" alt="">You Music</a>${body}
+<footer><a href="${PREFIX}/">You Music</a> · <a href="${PREFIX}/app/">Веб-плеер</a> · <a href="${PREFIX}/terms">Соглашение</a> · <a href="https://github.com/Gl1ch5/You-Music">Исходный код</a></footer></main></body></html>`;
+}
+
+function growthChart(series) {
+  const w = 600, h = 160, pad = 6;
+  const max = Math.max(1, ...series), min = Math.min(...series);
+  const span = Math.max(1, max - min);
+  const pts = series.map((v, i) => [pad + (i * (w - 2 * pad)) / (series.length - 1), h - pad - ((v - min) / span) * (h - 2 * pad - 10)]);
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join('');
+  const area = `${line}L${pts.at(-1)[0].toFixed(1)} ${h}L${pts[0][0].toFixed(1)} ${h}Z`;
+  const [lx, ly] = pts.at(-1);
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Рост аккаунтов за 30 дней">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".35"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+<path d="${area}" fill="url(#g)"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--accent)"/></svg>`;
 }
 
 function sitePage(s) {
   const n = (v) => Number(v).toLocaleString('ru-RU');
+  const stat = (v, label, extra = '') => `<div class="card stat"><b data-n="${v}">${n(v)}</b><span>${label}</span>${extra ? `<br><small>${extra}</small>` : ''}</div>`;
+  const feat = (icon, title, text) => `<div class="card feat">${ico(icon)}<h3>${title}</h3><p>${text}</p></div>`;
+  const dl = (href, icon, title, sub) => `<a class="card" href="${href}">${ico(icon)}<div><b>${title}</b><span>${sub}</span></div></a>`;
   return page('You Music — музыка с YouTube без рекламы', `
-<h1>You Music</h1>
-<p>Личный плеер для Android: поиск и воспроизведение музыки с YouTube без рекламы и аккаунта, рекомендации под ваш вкус, офлайн-загрузки, тексты песен, свои файлы, перенос из Spotify, Яндекс Музыки и Telegram, темы и моды.</p>
-<a class="btn" href="${RELEASES}">Скачать APK</a><a class="btn ghost" href="https://t.me/${esc(TG_BOT)}">Бот в Telegram</a>
+<section class="hero"><div>
+<h1>Вся музыка YouTube.<br><span class="grad">Без рекламы.</span></h1>
+<p class="lead">Плеер для Android, браузера, Windows и Linux: поиск и воспроизведение без аккаунта, бесконечные рекомендации под ваш вкус, тексты песен, офлайн и перенос из Spotify, Яндекс Музыки и Telegram.</p>
+<div class="actions"><a class="btn" href="${PREFIX}/app/">${ico('play')}Открыть веб-плеер</a><a class="btn ghost" href="#download">${ico('download')}Скачать</a></div>
+</div><img class="hero-art" src="${PREFIX}/app/icons/icon-512.png" alt="Иконка You Music"></section>
+
 <h2>Статистика</h2>
 <div class="grid">
-<div class="stat"><b>${n(s.users)}</b><span>аккаунтов</span></div>
-<div class="stat"><b>${n(s.activeWeek)}</b><span>заходили за неделю</span></div>
-<div class="stat"><b>${n(s.aiToday)}</b><span>подборок нейросети сегодня</span></div>
-<div class="stat"><b>${n(s.aiTotal)}</b><span>подборок всего</span></div>
-<div class="stat"><b>${n(s.tgTracks)}</b><span>треков из Telegram</span></div>
+${stat(s.users, 'аккаунтов', s.newWeek ? `+${n(s.newWeek)} за неделю` : '')}
+${stat(s.activeDay, 'заходили за сутки', `${n(s.activeWeek)} за неделю`)}
+${stat(s.synced, 'синхронизируют библиотеку')}
+${stat(s.aiTotal, 'подборок нейросети', s.aiToday ? `${n(s.aiToday)} сегодня` : '')}
+${stat(s.tgTracks, 'треков из Telegram')}
 </div>
+<div class="card chart"><div class="row"><span>Аккаунты за 30 дней</span><span>${s.newToday ? `+${n(s.newToday)} сегодня` : ''}</span></div>${growthChart(s.growth)}</div>
+<p style="margin-top:10px;font-size:13px">Считаются только аккаунты на сервере — приложением можно пользоваться и без них. Аналитики и трекинга нет.</p>
+
 <h2>Что умеет</h2>
-<ul><li>«Рекомендации» — бесконечный поток по вашим лайкам, плейлисту или треку, с фильтрами: популярное, новинки, русское, без слов и свои пожелания словами.</li>
-<li>Синхронный текст поверх обложки и перевод на русский.</li><li>Скачивание для офлайна, кэш, плавные переходы.</li>
-<li>Аккаунт необязателен: он нужен только для облачной копии, нейросети без настройки, бесплатного прокси и импорта из Telegram.</li></ul>`);
+<div class="grid three">
+${feat('wave', 'Рекомендации', 'Бесконечный поток по лайкам, треку или плейлисту. Фильтры: популярное, новинки, русское, без слов — и свои пожелания словами.')}
+${feat('lyrics', 'Тексты песен', 'Синхронный текст на месте обложки, тап — перемотка, перевод на русский.')}
+${feat('download', 'Офлайн', 'Скачивание треков и целых плейлистов, кэш, плавные переходы между песнями.')}
+${feat('swap', 'Перенос', 'Плейлисты и лайки из Spotify, Яндекс Музыки, списка или CSV и файлы из Telegram-бота.')}
+${feat('palette', 'Темы и моды', 'Graphite, AMOLED, Liquid Glass, Catppuccin, Nord, Synthwave, наборы значков и моды.')}
+${feat('cloud', 'Аккаунт по желанию', 'Синхронизация между телефоном и компьютером, нейросеть без настройки, бесплатный прокси.')}
+</div>
+
+<h2 id="download">Скачать</h2>
+<div class="dl">
+${dl(`${PREFIX}/app/`, 'play', 'Веб-плеер', 'Прямо в браузере, без установки')}
+${dl(RELEASES, 'android', 'Android', 'APK, обновляется сам')}
+${dl(`${NIGHTLY}/YouMusic-windows.exe`, 'windows', 'Windows', 'YouMusic-windows.exe')}
+${dl(`${NIGHTLY}/YouMusic-linux.tar.gz`, 'linux', 'Linux', 'Архив, запуск — ./YouMusic')}
+${dl(`https://t.me/${esc(TG_BOT)}`, 'telegram', 'Бот в Telegram', 'Пришлите файлы — они появятся в приложении')}
+</div>
+<script>
+// Count the numbers up once the page opens.
+if(!matchMedia('(prefers-reduced-motion:reduce)').matches)document.querySelectorAll('[data-n]').forEach(function(el){var to=+el.dataset.n,t0=performance.now();if(to<2)return;(function f(t){var k=Math.min(1,(t-t0)/900);el.textContent=Math.round(to*(1-Math.pow(1-k,3))).toLocaleString('ru-RU');if(k<1)requestAnimationFrame(f)})(t0)})
+</script>`, { wide: true });
 }
 
 function trackPage(id) {
@@ -393,7 +491,7 @@ function trackPage(id) {
 <img class="cover" src="https://i.ytimg.com/vi/${id}/hqdefault.jpg" alt="">
 <h1>Послушать в You Music</h1>
 <p>С вами поделились треком. Если приложение установлено, он откроется в нём.</p>
-<a class="btn" href="${app}">Открыть в приложении</a><a class="btn ghost" href="${RELEASES}">Скачать You Music</a><a class="btn ghost" href="${yt}">Открыть на YouTube</a>
+<div class="actions"><a class="btn" href="${app}">Открыть в приложении</a><a class="btn ghost" href="${PREFIX}/app/?open=${encodeURIComponent(app)}">${ico('play')}В веб-плеере</a><a class="btn ghost" href="${yt}">Открыть на YouTube</a></div>
 <script>setTimeout(function(){location.href=${JSON.stringify(app)}},300)</script>`);
 }
 

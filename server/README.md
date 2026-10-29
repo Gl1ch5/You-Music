@@ -38,3 +38,17 @@ sudo cp deploy/env.example /opt/youmusic-server/.env && sudo chmod 600 /opt/youm
 sudo cp deploy/youmusic-server.service /etc/systemd/system/ && sudo systemctl enable --now youmusic-server
 # add deploy/nginx.conf to the site's HTTPS server block, then: sudo nginx -t && sudo systemctl reload nginx
 ```
+
+### Web player (`/youmusic/app/`)
+
+The browser version of the app: the Python backend from `desktop/` (catalog and audio via yt-dlp) serves the UI built with
+`npm run build:web` and forwards `server/*` to this server. It needs a JS runtime (node/deno) on `PATH` for yt-dlp.
+
+```bash
+sudo git clone -b <branch> https://github.com/Gl1ch5/You-Music /opt/youmusic-web/src
+sudo python3 -m venv /opt/youmusic-web/venv && sudo /opt/youmusic-web/venv/bin/pip install -r /opt/youmusic-web/src/desktop/requirements.txt PySocks
+(cd /opt/youmusic-web/src/web && sudo npm ci && sudo npx vite build --mode web) && sudo cp -r /opt/youmusic-web/src/web/dist-web /opt/youmusic-web/ui
+sudo cp deploy/youmusic-web.service /etc/systemd/system/ && sudo systemctl enable --now youmusic-web
+```
+
+The site (`/`) shows account statistics (total, new, active, synced, a 30-day growth chart) and links to the web player and desktop builds.

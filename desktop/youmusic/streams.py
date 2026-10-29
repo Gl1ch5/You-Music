@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import threading
 import time
 import urllib.error
@@ -40,11 +41,22 @@ _cache: dict[str, tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
 
 
-def _js_runtime() -> str | None:
-    """YouTube's player challenges need a JS runtime (yt-dlp-ejs); without one some formats are refused."""
+def _js_runtime() -> tuple[str, dict] | None:
+    """YouTube's player challenges need a JS runtime (yt-dlp-ejs); without one some formats are refused.
+    The desktop build ships deno next to the app (bin/), otherwise the one from the `deno` package or PATH."""
+    exe = "deno.exe" if sys.platform == "win32" else "deno"
+    bundled = Path(getattr(sys, "_MEIPASS", "")) / "bin" / exe
+    if getattr(sys, "frozen", False) and bundled.is_file():
+        return "deno", {"path": str(bundled)}
+    try:
+        import deno  # type: ignore[import-not-found]
+
+        return "deno", {"path": deno.find_deno_bin()}
+    except Exception:  # noqa: BLE001
+        pass
     for name in ("deno", "node", "bun"):
         if shutil.which(name):
-            return name
+            return name, {}
     return None
 
 
@@ -62,7 +74,7 @@ def resolve(video_id: str, fresh: bool = False) -> dict:
     opts = {"quiet": True, "no_warnings": True, "skip_download": True, "format": FORMAT, "noplaylist": True, "logger": _Quiet()}
     runtime = _js_runtime()
     if runtime:
-        opts["js_runtimes"] = {runtime: {}}
+        opts["js_runtimes"] = {runtime[0]: runtime[1]}
     if net.proxy:
         opts["proxy"] = net.proxy
     try:

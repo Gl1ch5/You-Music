@@ -37,7 +37,8 @@ android/                 Kotlin, AGP 9 (встроенный Kotlin), Gradle wra
   app/src/main/res/drawable-nodpi/app_icon_NN.webp + mipmap-anydpi-v26/ic_launcher_NN.xml — иконки лаунчера; превью — web/public/app-icons/NN.webp
   app/schemas/           схемы Room — коммитить при изменении БД (и писать миграцию)
 web/                     TypeScript + Vite, без фреймворков
-  src/bridge/            contract.ts (типы команд/событий), bridge.ts (единственное место, знающее о платформе), mock.ts (браузер/скриншоты)
+  src/bridge/            contract.ts (типы команд/событий), bridge.ts (единственное место, знающее о платформе; `platform`), mock.ts (браузер/скриншоты),
+                         web.ts (веб-плеер и десктоп: команды поверх Python-бэкенда api/*, библиотека в localStorage, файлы в IndexedDB, звук — <audio>)
   src/core/              signal.ts (реактивность), dom.ts (h(), иконки, форматтеры), store.ts (глобальное состояние), bus.ts
   src/design/            tokens.css, base.css, components.css, icons.ts (SVG-спрайт), iconPacks.ts (наборы значков iOS/One UI), noise.png
   src/theme/             темы (builtin.ts, engine.ts, types.ts)
@@ -49,11 +50,14 @@ web/                     TypeScript + Vite, без фреймворков
   src/screens/           экраны; каждый регистрируется через defineRoute() и импортируется в main.ts; home — вкладки «Для вас | Чарт | Подборки»
   src/player/            mini.ts, full.ts
   src/mods/              registry (слоты/хуки), api (window.app.mod), host (загрузка, разрешения, изоляция ошибок)
+  public/icons/, manifest.webmanifest   иконки веб-версии (из app_icon_10), PWA-манифест
   scripts/               screenshots.mjs, mods-check.mjs (Playwright + mock)
 server/                  Node 22 без зависимостей: аккаунты (scrypt), синхронизация, /api/ai/chat (50 в день, tier fast/deep), HTTP CONNECT-прокси (только 80/443, не в частные сети),
                          Telegram-бот (long polling, /api/tg/*), страницы: сайт со статистикой, /terms, /t/<id> (поделиться);
-                         deploy/ (systemd, nginx, env.example). Секреты — только в /opt/youmusic-server/.env на сервере
-desktop/                 (в работе) Python-бэкенд для веб- и десктоп-версии: youmusic/ (stdlib + yt-dlp) — каталог YouTube Music, потоки, сеть; UI тот же web/
+                         deploy/ (systemd youmusic-server + youmusic-web, nginx: /youmusic/app/ → 8741, остальное → 8740, env.example). Секреты — только в /opt/youmusic-server/.env на сервере
+desktop/                 Python-бэкенд веб-плеера и приложения для Windows/Linux: youmusic/app.py (HTTP: api/*, проксирование server/*, UI с data-platform),
+                         ytm.py (каталог YouTube Music), streams.py (yt-dlp; JS-рантайм: встроенный deno → пакет deno → PATH), net.py (прокси), desktop.py (окно pywebview,
+                         порт 38741 — постоянный, иначе пропадёт localStorage), run.py (вход PyInstaller), assets/ (icon.png/ico)
 docs/                    bridge.md (контракт), mods.md (API модов), screenshots/, icon.svg (иконка)
 examples/mods/           sleep-timer, clean-versions
 .github/workflows/       ci.yml (каждый push + nightly-релиз на основной ветке с version.json), release.yml (теги v*)
@@ -69,11 +73,16 @@ npm run typecheck     # tsc
 npm test              # vitest: logic/*.test.ts
 npm run build         # tsc + vite → android/app/src/main/assets/ui (в git не коммитится)
 npm run dev           # UI в браузере на mock-данных
+npm run build:web     # веб-плеер/десктоп → web/dist-web (base ./, транспорт web.ts)
 npm run screenshots   # docs/screenshots (после build)
 node scripts/mods-check.mjs   # smoke-тест модов (после build)
 
 cd ../android
 ./gradlew :app:assembleDebug  # нужен собранный UI в assets/ui
+
+cd ../desktop
+pip install -r requirements-desktop.txt && python -m youmusic.desktop   # окно (после build:web)
+python -m youmusic.app --ui ../web/dist-web                            # веб-плеер на :8741
 ```
 
 Основная сборка APK — GitHub Actions. Перед пушем прогоняйте lint, typecheck, test и, если трогали Kotlin, `assembleDebug`.
@@ -103,6 +112,7 @@ cd ../android
 22. **Целостность.** Простые экраны коллекции (плейлисты, скачанное, мои файлы, история) строятся одинаково: `pageIntro(title, sub, listenButtons(...))` — заголовок, одна строка фактов, две равные кнопки; редкие действия — в «⋯»/«+» в шапке. Фильтры рекомендаций — только в шторке «Фильтры» на главной, отдельных рядов чипов нет. Плеер — по компоновке Яндекс Музыки: очередь в шапке; рядом с названием «скачать» и «⋮»; ряд «не нравится / назад / play / вперёд / нравится»; три широкие кнопки «повтор / текст / перемешать»; плашка «Волна по треку». Текст песни показывается вместо обложки.
 23. **Без повторов.** Сравнивать песни — только через `songKeys()` из `logic/normalize.ts` (любой из ключей совпал → та же песня); новые пути наполнения очереди обязаны отсеивать по ним уже сыгранное и стоящее в очереди.
 18. **Загрузка видна всегда.** Действие пользователя, которое ждёт сеть, оборачивайте в `busy()` (`core/busy.ts`, полоска сверху) или показывайте скелетон; запуск потока — `player.preparing`.
+25. **Платформы.** Различия Android / веб / компьютер — только через `platform` из `bridge.ts` (скрывать недоступное: скачивание и прокси нет в вебе; иконка, моды, обновления — только Android). Новая команда моста требует реализации и в `web.ts` (или явного `unavailable`).
 19. **Сервер необязателен.** Без аккаунта всё работает как раньше. Секреты сервера (ключ и модель нейросети) — только в env на сервере, в репозиторий и APK не попадают.
 
 ## Как добавить…
@@ -133,3 +143,4 @@ cd ../android
 | 2026-10-28 | Плеер: плашка «Волна по треку» не исчезает после нажатия (раньше плеер прыгал — «мерцание»), а показывает «Играет волна по треку». |
 | 2026-10-28 | Обложки: кадры видео YouTube 4:3 с чёрными полосами (`hqdefault/sddefault`) больше не берутся первыми — сначала `maxresdefault`/`hq720`; серая заглушка YouTube 120×90 считается ошибкой и пропускается (`setCoverUrls`). |
 | 2026-10-29 | Рекомендации: кандидаты из радио YouTube Music (`trackRadio`, микс `RDAMVM<id>`), затем «похожие видео»; отсев не-песен (`looksLikeSong`: реакции, «subscribers special», часовые сборники, <3000 просмотров); с фильтрами волна растёт от треков, которые им проходят (из всех лайков/истории, иначе — кэш чарта Яндекса); фильтры применяются и без данных Deezer; смена фильтров во время волны показывает, что дальше, и не стирает очередь, если ничего не нашлось. Настройки → «Рекомендации»: «Нейросеть в рекомендациях» и «Нейросеть в волнах» (`recoAi`/`waveAi`, по умолчанию выключены). Блок «Рекомендации» больше не растягивается длинным названием трека. |
+| 2026-10-29 | Веб-плеер на `grzxk.ru/youmusic/app/` и приложение для Windows/Linux (pywebview): транспорт `bridge/web.ts`, `platform`, сборка `build:web` (`dist-web`), Python-бэкенд `desktop/youmusic` (прокси, пинг, открытие ссылок, встроенный deno), сервис `youmusic-web` + nginx; CI-джоб `desktop` (PyInstaller, `.exe` и `.tar.gz` в nightly). Иконки везде: favicon, PWA-манифест, окно и `.exe`, сайт. Новый сайт: статистика (всего, новые, активные, синхронизация, график роста за 30 дней), кнопки веб-плеера и загрузок; страница трека открывается и в веб-плеере. |

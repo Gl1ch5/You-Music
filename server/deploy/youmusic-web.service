@@ -1,0 +1,23 @@
+[Unit]
+Description=You Music web player (desktop/youmusic backend at /youmusic/app/)
+After=network-online.target youmusic-server.service
+Wants=network-online.target
+
+[Service]
+# /opt/youmusic-web: venv (pip install -r desktop/requirements.txt PySocks), src/ (checkout), ui/ (web/dist-web).
+WorkingDirectory=/opt/youmusic-web/src/desktop
+ExecStart=/opt/youmusic-web/venv/bin/python -m youmusic.app --host 127.0.0.1 --port 8741 --ui /opt/youmusic-web/ui --upstream http://127.0.0.1:8740/youmusic --data /var/lib/youmusic-web
+# yt-dlp solves YouTube's player challenges with node from PATH and keeps its cache here.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin XDG_CACHE_HOME=/var/cache/youmusic-web
+DynamicUser=yes
+StateDirectory=youmusic-web
+CacheDirectory=youmusic-web
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

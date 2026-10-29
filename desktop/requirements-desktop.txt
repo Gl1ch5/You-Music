@@ -1,3 +1,7 @@
 -r requirements.txt
-pywebview>=6.0
+pywebview>=6.0; sys_platform != "linux"
+# Linux: Qt WebEngine, so the bundled app does not depend on system GTK/WebKit
+pywebview[qt]>=6.0; sys_platform == "linux"
 PySocks>=1.7.1
+# JS runtime for YouTube player challenges, bundled into the app
+deno>=2.5

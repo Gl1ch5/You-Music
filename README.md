@@ -2,7 +2,7 @@
 
 **Музыка с YouTube без рекламы — с рекомендациями под ваш вкус, текстами, офлайном и переносом из Spotify, Яндекс Музыки и Telegram.**
 
-Личный плеер для Android: поиск и воспроизведение без ключей и аккаунта, бесконечные рекомендации с фильтрами, лайки и плейлисты, офлайн-загрузки, свои файлы, темы и моды. Сайт: [grzxk.ru/youmusic](https://grzxk.ru/youmusic/).
+Плеер для Android, браузера ([веб-плеер](https://grzxk.ru/youmusic/app/)), Windows и Linux: поиск и воспроизведение без ключей и аккаунта, бесконечные рекомендации с фильтрами, лайки и плейлисты, офлайн-загрузки, свои файлы, темы и моды. Сайт: [grzxk.ru/youmusic](https://grzxk.ru/youmusic/).
 
 Дизайн-система **Graphite**: нейтральный графитовый интерфейс, цвет приносят только обложки.
 
@@ -25,6 +25,10 @@
 
 1. Откройте **[Releases](../../releases)** → `nightly` (последняя сборка) или версию `v*`.
 2. Скачайте `you-music-*.apk` и установите (разрешите установку из неизвестных источников).
+
+**Веб-плеер:** [grzxk.ru/youmusic/app](https://grzxk.ru/youmusic/app/) — без установки. Библиотека хранится в браузере; войдите в аккаунт, чтобы синхронизировать её с телефоном.
+
+**Windows / Linux:** в том же релизе `nightly` — `YouMusic-windows.exe` и `YouMusic-linux.tar.gz` (распакуйте и запустите `./YouMusic`). Это тот же интерфейс в окне pywebview с локальным бэкендом на Python (yt-dlp); работают скачивание и прокси.
 
 Только для личного использования. Аналитики и трекинга нет.
 
@@ -80,6 +84,7 @@ examples/  mods/ — два примера модов
 Сборка и APK — через GitHub Actions:
 
 * **CI** (каждый push/PR): lint, typecheck, тесты TS, сборка UI, debug APK как артефакт. Push в основную ветку дополнительно обновляет пре-релиз **nightly** с release-APK и zip примеров модов.
+* **Desktop** (после основной сборки): PyInstaller для Windows (`.exe`) и Linux (`.tar.gz`), на основной ветке прикладываются к nightly.
 * **Release** (тег `v*`, например `v1.0.0`): подписанный APK и zip модов в GitHub Releases.
 
 Локально (если нужно): Node 22, JDK 17, Android SDK.
@@ -89,6 +94,9 @@ cd web && npm ci && npm test && npm run build   # UI собирается в and
 cd ../android && ./gradlew assembleDebug
 cd ../web && npm run dev                         # UI в браузере на тестовых данных
 npm run screenshots                              # docs/screenshots
+npm run build:web                                # веб-плеер и десктоп → web/dist-web
+cd ../desktop && pip install -r requirements-desktop.txt && python -m youmusic.desktop   # окно для Windows/Linux
+python -m youmusic.app --ui ../web/dist-web      # веб-плеер на http://127.0.0.1:8741
 ```
 
 ### Секреты для подписи

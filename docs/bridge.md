@@ -20,6 +20,12 @@
 { "type": "event", "name": "progress", "data": { "positionMs": 1200, "durationMs": 215000, "bufferedMs": 40000 } }
 ```
 
+### Веб-плеер и приложение для компьютера
+
+`bridge.ts` выбирает транспорт: `youBridge` на Android, `web.ts` в сборке `vite build --mode web`, иначе `mock.ts`. Экспорт `platform` — `'android' | 'web' | 'desktop' | 'mock'` (`desktop` — когда бэкенд проставил `<html data-platform="desktop">`).
+
+`web.ts` реализует те же команды поверх Python-бэкенда (`desktop/youmusic/app.py`): каталог и поток — `api/*`, звук — `<audio>` из `api/stream/<id>` (в веб-сборке CSP `media-src 'self' blob:`), аккаунт — `server/*` проксируется на сервер. Библиотека и kv — в `localStorage` (`ym.*`) в формате полной копии Android, свои файлы — в IndexedDB. Скачивание, прокси и открытие ссылок — только на компьютере; иконка, моды, обновления и папка копий — только на Android (в настройках скрыты).
+
 В JS: `call('search', { query, filter })` → `Promise<SearchPage>`, `onNative('progress', fn)`.
 
 ## Коды ошибок
