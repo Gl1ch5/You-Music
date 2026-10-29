@@ -146,7 +146,7 @@ function recommendationsSection(scope: Scope): HTMLElement {
   const reload = () => {
     replaceChildren(body, skeletonCards(4));
     loadRecommendations()
-      .then((tracks) => {
+      .then(({ tracks, from }) => {
         if (!tracks.length) {
           replaceChildren(body, h('div.pad.muted.small', null, 'Лайкните несколько треков — и здесь появятся рекомендации.'));
           return;
@@ -173,15 +173,17 @@ async function applyReco(patch: Partial<Settings>): Promise<void> {
 const CHART_KEY = 'cache.chart';
 const CHART_TTL = 12 * 3600_000;
 
-async function loadChart(): Promise<Track[]> {
+/** The chart and where it came from: Yandex Music, or YouTube when Yandex is unreachable (the web player's server). */
+async function loadChart(): Promise<{ tracks: Track[]; from: string }> {
   const raw = await call('kvGet', { key: CHART_KEY }).catch(() => null);
   try {
-    const cached = raw ? (JSON.parse(raw) as { at: number; tracks: Track[] }) : null;
-    if (cached && Date.now() - cached.at < CHART_TTL && cached.tracks.length) return cached.tracks;
+    const cached = raw ? (JSON.parse(raw) as { at: number; tracks: Track[]; from?: string }) : null;
+    if (cached && Date.now() - cached.at < CHART_TTL && cached.tracks.length) return { tracks: cached.tracks, from: cached.from ?? 'Яндекс Музыка' };
   } catch {
     /* rebuilt below */
   }
   const list = await call('chart', { source: 'yandex' });
+  const from = list.title.includes('YouTube') ? 'YouTube' : 'Яндекс Музыка';
   const top = list.tracks.slice(0, 20);
   const found: (Track | null)[] = new Array(top.length).fill(null);
   let next = 0;
@@ -194,8 +196,8 @@ async function loadChart(): Promise<Track[]> {
   };
   await Promise.all(Array.from({ length: 5 }, worker));
   const tracks = [...new Map(found.filter((t): t is Track => !!t).map((t) => [t.id, t])).values()];
-  if (tracks.length) void call('kvSet', { key: CHART_KEY, value: JSON.stringify({ at: Date.now(), tracks }) });
-  return tracks;
+  if (tracks.length) void call('kvSet', { key: CHART_KEY, value: JSON.stringify({ at: Date.now(), tracks, from }) });
+  return { tracks, from };
 }
 
 /** Chart pane: numbered positions, like a real chart. */
@@ -216,7 +218,7 @@ function chartPane(scope: Scope): HTMLElement {
           h(
             'div.pane-head',
             null,
-            h('div', { style: { flex: '1' } }, h('div.h2', null, 'Топ недели'), h('div.small.muted', null, `Яндекс Музыка · ${tracks.length} треков`)),
+            h('div', { style: { flex: '1' } }, h('div.h2', null, 'Топ недели'), h('div.small.muted', null, `${from} · ${tracks.length} треков`)),
             button('Слушать', () => playTracks(tracks, 0, ctx), { cls: 'primary', icon: 'play' }),
           ),
           h(
