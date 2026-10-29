@@ -37,6 +37,11 @@ class _Quiet:
     warning = info = error = debug
 
 
+# yt-dlp's player clients, tried in turn: YouTube regularly starts refusing the streams of one of them
+# (in autumn 2026 — TVHTML5, the default with a JS runtime). The one that worked last is tried first.
+CLIENTS: list[list[str] | None] = [None, ["visionos"], ["android_vr"], ["web_safari"], ["ios"], ["mweb"]]
+_client = 0
+
 _cache: dict[str, tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
 
@@ -71,22 +76,50 @@ def resolve(video_id: str, fresh: bool = False) -> dict:
             return hit[1]
     import yt_dlp  # heavy import, only when the first track plays
 
-    opts = {"quiet": True, "no_warnings": True, "skip_download": True, "format": FORMAT, "noplaylist": True, "logger": _Quiet()}
+    global _client
     runtime = _js_runtime()
-    if runtime:
-        opts["js_runtimes"] = {runtime[0]: runtime[1]}
-    if net.proxy:
-        opts["proxy"] = net.proxy
-    try:
-        with yt_dlp.YoutubeDL(opts) as y:
-            info = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-    except Exception as e:  # noqa: BLE001
-        msg = str(e)
-        if "Sign in" in msg or "confirm your age" in msg.lower():
-            raise StreamError("unavailable", "YouTube требует вход для этого видео") from e
-        if "unavailable" in msg.lower() or "private" in msg.lower():
-            raise StreamError("unavailable", "Видео недоступно") from e
-        raise StreamError("extraction", f"Не удалось получить поток: {msg[:200]}") from e
+    order = [_client] + [i for i in range(len(CLIENTS)) if i != _client]
+    refused = None
+    for i in order:
+        opts = {"quiet": True, "no_warnings": True, "skip_download": True, "format": FORMAT, "noplaylist": True, "logger": _Quiet()}
+        if runtime:
+            opts["js_runtimes"] = {runtime[0]: runtime[1]}
+        if CLIENTS[i]:
+            opts["extractor_args"] = {"youtube": {"player_client": CLIENTS[i]}}
+        if net.proxy:
+            opts["proxy"] = net.proxy
+        try:
+            with yt_dlp.YoutubeDL(opts) as y:
+                info = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)
+            if "Sign in" in msg or "confirm your age" in msg.lower():
+                raise StreamError("unavailable", "YouTube требует вход для этого видео") from e
+            if "unavailable" in msg.lower() or "private" in msg.lower():
+                raise StreamError("unavailable", "Видео недоступно") from e
+            refused = StreamError("extraction", f"Не удалось получить поток: {msg[:200]}")
+            continue
+        data = _stream_data(info, now)
+        # YouTube hands out URLs it then refuses (403) for some clients: check one byte before trusting a client.
+        try:
+            _fetch(data[1], 0, 0)
+        except urllib.error.HTTPError as e:
+            if e.code in (403, 404, 410):
+                refused = StreamError("network", "YouTube не отдал поток. Попробуйте ещё раз.")
+                continue
+            raise StreamError("network", "YouTube не отдал поток. Попробуйте ещё раз.") from e
+        except (urllib.error.URLError, OSError) as e:
+            raise StreamError("network", "Нет связи с YouTube") from e
+        _client = i
+        with _cache_lock:
+            if len(_cache) > 300:
+                _cache.clear()
+            _cache[video_id] = data
+        return data[1]
+    raise refused or StreamError("extraction", "У видео нет аудиопотока")
+
+
+def _stream_data(info: dict, now: float) -> tuple[float, dict]:
     fmt = info if info.get("url") else (info.get("requested_formats") or [{}])[0]
     url = fmt.get("url")
     if not url:
@@ -106,11 +139,7 @@ def resolve(video_id: str, fresh: bool = False) -> dict:
         "channels": fmt.get("audio_channels"),
         "duration": info.get("duration"),
     }
-    with _cache_lock:
-        if len(_cache) > 300:
-            _cache.clear()
-        _cache[video_id] = (min(expires, now + 5 * 3600), data)
-    return data
+    return min(expires, now + 5 * 3600), data
 
 
 def _fetch(info: dict, start: int, end: int) -> bytes:

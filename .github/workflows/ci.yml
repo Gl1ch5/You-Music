@@ -181,6 +181,25 @@ jobs:
             mkdir -p ../dist && tar -czf "../dist/${{ matrix.asset }}" -C dist YouMusic
           fi
 
+      # Start the packaged app for real: the window must load the interface (desktop.py, YOUMUSIC_SMOKE).
+      - name: Smoke test
+        working-directory: desktop
+        run: |
+          export YOUMUSIC_SMOKE="$PWD/smoke.txt"
+          start=$(date +%s)
+          if [ "$RUNNER_OS" = Windows ]; then
+            timeout 240 ./dist/YouMusic.exe || true
+          else
+            sudo apt-get install -y -q xvfb libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 \
+              libxcb-shape0 libxcb-render-util0 libxcb-image0 libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxkbfile1 >/dev/null
+            # No GPU on the runner: software rendering
+            QT_QUICK_BACKEND=software QT_XCB_GL_INTEGRATION=none QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu \
+              timeout 240 xvfb-run -a -s "-screen 0 1280x900x24" ./dist/YouMusic/YouMusic || true
+          fi
+          echo "started in $(( $(date +%s) - start )) s"
+          cat smoke.txt || { echo "no result: the app did not start"; exit 1; }
+          grep -qx ok smoke.txt
+
       - uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.asset }}

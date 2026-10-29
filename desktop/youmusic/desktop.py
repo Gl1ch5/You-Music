@@ -13,6 +13,8 @@ import os
 import socket
 import sys
 import threading
+import time
+import traceback
 import urllib.request
 from pathlib import Path
 
@@ -70,11 +72,61 @@ def _free(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) != 0
 
 
+def _smoke(window, out: str) -> None:
+    """CI check (YOUMUSIC_SMOKE=<file>): wait for the UI to come up in the window, write ok/fail, close."""
+    result = "fail: the interface did not load in 90 s"
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        try:
+            if window.evaluate_js("!!document.querySelector('.tabbar')"):
+                result = "ok"
+                break
+        except Exception as e:  # noqa: BLE001
+            result = f"fail: {e}"
+        time.sleep(1)
+    Path(out).write_text(result, encoding="utf-8")
+    window.destroy()
+
+
+def _report(error: BaseException) -> None:
+    """The windowed build has no console: keep the traceback in a file and show it, or the app just "does not start"."""
+    text = "".join(traceback.format_exception(error))
+    log = _data_dir() / "crash.log"
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+    smoke = os.environ.get("YOUMUSIC_SMOKE")
+    if smoke:
+        Path(smoke).write_text(f"fail: {text}", encoding="utf-8")
+        return
+    if sys.stderr:
+        sys.stderr.write(text)
+    if sys.platform == "win32":
+        import ctypes
+
+        hint = "Нужен Microsoft Edge WebView2 Runtime: https://go.microsoft.com/fwlink/p/?LinkId=2124703\n\n" if "WebView2" in text or "clr" in text or "pythonnet" in text else ""
+        ctypes.windll.user32.MessageBoxW(None, f"{hint}{error}\n\nПодробности: {log}", "You Music не запустился", 0x10)
+
+
 def main() -> None:
     try:
+        _main()
+    except SystemExit:
+        raise
+    except BaseException as e:  # noqa: BLE001
+        _report(e)
+        sys.exit(1)
+
+
+def _main() -> None:
+    try:
         import webview  # pywebview
-    except ImportError:
-        raise SystemExit("Нужен pywebview: pip install -r requirements-desktop.txt")
+    except ImportError as e:
+        if getattr(sys, "frozen", False):
+            raise  # a broken bundle: show what is missing
+        raise SystemExit("Нужен pywebview: pip install -r requirements-desktop.txt") from e
 
     data = _data_dir()
     port = PORT
@@ -87,9 +139,15 @@ def main() -> None:
 
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     webview.settings["ALLOW_DOWNLOADS"] = True
-    webview.create_window(TITLE, f"http://127.0.0.1:{port}/", width=480, height=900, min_size=(360, 560), background_color="#161719", text_select=False)
+    window = webview.create_window(TITLE, f"http://127.0.0.1:{port}/", width=480, height=900, min_size=(360, 560), background_color="#161719", text_select=False)
     icon = _icon()
-    webview.start(private_mode=False, storage_path=str(data / "webview"), icon=str(icon) if icon.is_file() else None)
+    smoke = os.environ.get("YOUMUSIC_SMOKE")
+    webview.start(
+        (lambda: _smoke(window, smoke)) if smoke else None,
+        private_mode=False,
+        storage_path=str(data / "webview"),
+        icon=str(icon) if icon.is_file() else None,
+    )
 
 
 if __name__ == "__main__":
