@@ -7,7 +7,7 @@ import { app, currentTrack, player, type Settings } from '../core/store';
 import { RECO_FILTERS, toggleFilter } from '../logic/filters';
 import { hooks, runHooks } from '../mods/registry';
 import { adoptSourceMeta, findTrack, related } from '../services/catalog';
-import { aiFor, createWave, isWaveActive, playTrackWave, playTracks, playWave, restyleWave, resumeWave, togglePlay } from '../services/playback';
+import { aiFor, createWave, isRecoActive, isWaveActive, playTrackWave, playTracks, playWave, restyleWave, resumeWave, togglePlay } from '../services/playback';
 import { forgetWave, savedWaves } from '../services/waves';
 import { saveSettings } from '../services/settings';
 import { button, chip, emptyState, haptic, iconButton, playButton, sectionHead, skeletonCards, skeletonRows, trackCover, trackRow } from '../ui/components';
@@ -41,7 +41,8 @@ function activeFilterCount(s: Settings): number {
  * that holds the mode and every filter.
  */
 function recoHero(scope: Scope): HTMLElement {
-  const inStream = () => player.context.value?.kind === 'wave';
+  // A wave by a track or a playlist is not "Рекомендации": the button stays off and starts them.
+  const inStream = isRecoActive;
   const btn = playButton(scope, {
     size: 'lg',
     playing: () => {
@@ -54,7 +55,7 @@ function recoHero(scope: Scope): HTMLElement {
       const prep = player.preparing.value;
       return (player.buffering.value && player.wantsPlay.value && on) || prep;
     },
-    onToggle: () => (isWaveActive() ? togglePlay() : playWave()),
+    onToggle: () => (isRecoActive() ? togglePlay() : playWave()),
   });
   const sub = h('div.reco-sub.ellipsis');
   const count = h('span.filter-count');

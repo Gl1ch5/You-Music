@@ -111,6 +111,7 @@ function songParts(track: Pick<Track, 'title' | 'artist'>): { artist: string; ti
       .toLowerCase()
       .replace(/[([【].*?[)\]】]/g, ' ')
       .replace(/\b(?:feat|ft|prod)\.?\s.*$/i, ' ')
+      .replace(/\b(?:ultra|super|extra|very|mega)\s+(?=slowed|sped|speed|reverb|nightcore)/gi, ' ')
       .replace(LOOSE_NOISE_RE, ' ')
       .replace(VERSION_WORDS_RE, ' ');
   let artist = track.artist;
@@ -125,7 +126,10 @@ function songParts(track: Pick<Track, 'title' | 'artist'>): { artist: string; ti
       if (artistKey(left) !== artistKey(artist)) artist = left;
     } else title = left;
   }
-  return { artist: latin(artistKey(artist)), title: latin(compact(strip(title))) };
+  let song = compact(strip(title));
+  // "LO0K" + "Sped Up": the title is only a version tag, the song's name sits in the artist field.
+  if (!song) song = compact(strip(artist));
+  return { artist: latin(artistKey(artist)), title: latin(song) };
 }
 
 /** Key that is equal for all versions and uploads of one song: "artist|title" without versions, feats and noise. */

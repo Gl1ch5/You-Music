@@ -246,6 +246,12 @@ function dedupeAgainstQueue(tracks: Track[], upToCurrent = false): Track[] {
   });
 }
 
+/** Whether the main "Рекомендации" play (not a wave by a track or a playlist): only they light the home button. */
+export function isRecoActive(): boolean {
+  const ctx = player.context.value;
+  return ctx?.kind === 'wave' && ctx.title.startsWith('Рекомендации');
+}
+
 export function isWaveActive(): boolean {
   return player.context.peek()?.kind === 'wave';
 }
@@ -297,7 +303,6 @@ export function next(): void {
   const pos = livePosition();
   if (track && pos < 30_000) {
     uiBus.emit('skip', { track, positionMs: pos });
-    wave?.feedback('skip', track);
   }
   if (player.index.peek() < player.queue.peek().length - 1) expectLoading();
   call('next');
@@ -364,7 +369,7 @@ export function initPlayback(): void {
     if (liked) wave?.feedback('like', track);
   });
   uiBus.on('dislike', ({ track }) => {
-    wave?.feedback('skip', track);
+    wave?.feedback('dislike', track);
     if (currentTrack.peek()?.id === track.id && player.index.peek() < player.queue.peek().length - 1) {
       expectLoading();
       call('next');
