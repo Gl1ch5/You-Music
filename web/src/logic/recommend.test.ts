@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryEntry, Like, Track } from '../bridge/contract';
 import { artistKey } from './normalize';
-import { buildProfile, limitArtistRuns, looksLikeSong, newSession, scoreCandidates, selectTracks, Wave, type RecoSource } from './recommend';
+import { buildProfile, limitArtistRuns, looksLikeSong, newSession, pickSeeds, scoreCandidates, selectTracks, Wave, type RecoSource } from './recommend';
 
 const NOW = 1_800_000_000_000;
 const t = (id: string, artist: string, title = id, durationMs = 200_000): Track => ({ id, source: 'yt', title, artist, durationMs });
@@ -17,17 +17,35 @@ const play = (track: Track, opts: Partial<HistoryEntry> = {}): HistoryEntry => (
 });
 
 describe('buildProfile', () => {
-  it('counts likes and completions per artist and tracks skip rate', () => {
+  it('counts likes and completions per artist; skips do not count against an artist', () => {
     const a = t('a', 'Artist A');
     const b = t('b', 'Artist B');
     const p = buildProfile({
       likes: [like(a)],
       history: [play(b, { skipped: true, completed: false }), play(t('b2', 'Artist B'), { skipped: true, completed: false })],
       now: NOW,
+      dislikes: [{ id: 'c', key: 'c|c', artist: 'Artist C', at: NOW }],
     });
     expect(p.artistScore.get(artistKey('Artist A'))).toBeGreaterThan(3);
-    expect(p.artistSkip.get(artistKey('Artist B'))).toBe(1);
-    expect(p.skippedIds.has('b')).toBe(true);
+    expect(p.artistDislike.has(artistKey('Artist B'))).toBe(false);
+    expect(p.artistDislike.get(artistKey('Artist C'))).toBeCloseTo(0.4);
+  });
+
+  it('treats the last 20 likes as the current taste', () => {
+    const likes = Array.from({ length: 30 }, (_, i) => like(t(`l${i}`, `Artist ${i}`), i + 1));
+    const p = buildProfile({ likes, history: [], now: NOW });
+    expect(p.freshIds.size).toBe(20);
+    expect(p.freshIds.has('l0')).toBe(true);
+    expect(p.freshIds.has('l25')).toBe(false);
+    expect(p.artistScore.get(artistKey('Artist 19'))!).toBeGreaterThan(p.artistScore.get(artistKey('Artist 20'))! + 2);
+  });
+
+  it('takes most seeds from the last 20 likes', () => {
+    const likes = Array.from({ length: 60 }, (_, i) => like(t(`l${i}`, `Artist ${i}`), i + 1));
+    const seeds = pickSeeds({ likes, history: [], now: NOW }, 12, () => 0.3);
+    const fresh = seeds.filter((s) => Number(s.track.id.slice(1)) < 20);
+    expect(seeds.length).toBe(12);
+    expect(fresh.length).toBeGreaterThanOrEqual(9);
   });
 });
 
@@ -102,14 +120,14 @@ describe('Wave', () => {
     expect(ids).not.toContain('seed');
   });
 
-  it('penalises a skipped artist for the rest of the session', async () => {
+  it('penalises a disliked artist for the rest of the session, but not a skipped one', async () => {
     const wave = new Wave(source, 'mix', () => 0.5);
     const first = await wave.next(1);
-    wave.feedback('skip', first[0]);
-    wave.feedback('skip', first[0]);
+    wave.feedback('dislike', first[0]);
+    wave.feedback('dislike', first[0]);
     const rest = await wave.next(5);
-    const skippedArtist = artistKey(first[0].artist);
-    const idx = rest.findIndex((x) => artistKey(x.artist) === skippedArtist);
+    const disliked = artistKey(first[0].artist);
+    const idx = rest.findIndex((x) => artistKey(x.artist) === disliked);
     expect(idx === -1 || idx === rest.length - 1).toBe(true);
   });
 });

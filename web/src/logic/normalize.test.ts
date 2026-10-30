@@ -67,6 +67,13 @@ describe('versions', () => {
     expect(songKey({ title: 'Toscana', artist: 'Zericxxn' })).not.toBe(a);
   });
 
+  it('keys uploads titled only by their version by the artist field', () => {
+    const a = songKey({ title: 'Sped Up', artist: 'LO0K' });
+    expect(songKey({ title: 'Ultra Slowed', artist: 'LO0K' })).toBe(a);
+    expect(songKey({ title: 'slowed + reverb', artist: 'LO0K' })).toBe(a);
+    expect(songKey({ title: 'Super Bass', artist: 'Nicki Minaj' })).toContain('super bass');
+  });
+
   it('keys re-uploads of one song the same', () => {
     const a = songKey({ title: 'Белые ночи', artist: 'Сплин' });
     expect(songKey({ title: 'Сплин - Белые ночи (Official Video)', artist: 'Russian Rock Channel' })).toBe(a);

@@ -5,8 +5,10 @@ import { artistKey, songKeys } from './normalize';
 
 /**
  * Recommendations v1.
- * Candidates: related videos of liked and recently finished tracks.
- * Score: how many seeds point at a track (liked seeds count more) + how much the user plays its artist − skips.
+ * Candidates: related videos of liked and recently finished tracks; the last 20 likes are the user's current taste
+ * and weigh most (seeds, artist affinity, target vibe).
+ * Score: how many seeds point at a track (liked and fresh seeds count more) + how much the user plays its artist.
+ * Skips say nothing: a song can be skipped for any reason. Only "Не нравится" counts against a song and its artist.
  * Filters: nothing already liked or recently played, one version per song per session, ≤2 same artist in a row.
  * Vibe: when the source knows audio data (tempo, loudness, genres), the best candidates are nudged towards the
  * average vibe of the user's likes — or of the seed track for a wave "по треку".
@@ -57,9 +59,10 @@ export interface Profile {
   recentKeys: Set<string>;
   /** Affinity per artist key; ≥ 0. */
   artistScore: Map<string, number>;
-  /** Share of plays skipped per artist (0..1), only for artists with ≥ 2 plays. */
-  artistSkip: Map<string, number>;
-  skippedIds: Set<string>;
+  /** Penalty per artist from the user's dislikes (0..1.6). */
+  artistDislike: Map<string, number>;
+  /** The last FRESH_LIKES liked tracks: what the user likes now. */
+  freshIds: Set<string>;
   /** Disliked songs: never recommended. */
   blockedIds: Set<string>;
   blockedKeys: Set<string>;
@@ -68,6 +71,10 @@ export interface Profile {
 const DAY = 24 * 3600_000;
 const RECENT_WINDOW = 3 * DAY;
 const RECENT_COUNT = 60;
+/** How many of the newest likes count as the current taste. */
+export const FRESH_LIKES = 20;
+
+const newestLikes = (likes: Like[]): Like[] => [...likes].sort((a, b) => b.likedAt - a.likedAt);
 
 export function buildProfile({ likes, history, now, dislikes = [] }: RecoSignals): Profile {
   const artistScore = new Map<string, number>();
@@ -75,30 +82,19 @@ export function buildProfile({ likes, history, now, dislikes = [] }: RecoSignals
     const k = artistKey(artist);
     if (k) artistScore.set(k, (artistScore.get(k) ?? 0) + by);
   };
+  const fresh = newestLikes(likes).slice(0, FRESH_LIKES);
   for (const like of likes) {
     const ageDays = Math.max(0, (now - like.likedAt) / DAY);
     bump(like.track.artist, 3 * Math.exp(-ageDays / 120) + 1);
   }
+  // The newest likes are the current taste: their artists lead.
+  for (const like of fresh) bump(like.track.artist, 3);
+  for (const h of history) if (h.completed) bump(h.track.artist, 1);
 
-  const plays = new Map<string, { total: number; skipped: number }>();
-  const skippedIds = new Set<string>();
-  for (const h of history) {
-    const k = artistKey(h.track.artist);
-    const p = plays.get(k) ?? { total: 0, skipped: 0 };
-    p.total++;
-    if (h.skipped) {
-      p.skipped++;
-      skippedIds.add(h.track.id);
-    }
-    plays.set(k, p);
-    if (h.completed) bump(h.track.artist, 1);
-  }
-  const artistSkip = new Map<string, number>();
-  for (const [k, p] of plays) if (p.total >= 2) artistSkip.set(k, p.skipped / p.total);
-  // Each disliked song of an artist counts like a run of skips.
+  const artistDislike = new Map<string, number>();
   for (const d of dislikes) {
     const k = artistKey(d.artist);
-    if (k) artistSkip.set(k, Math.min(1.6, (artistSkip.get(k) ?? 0) + 0.4));
+    if (k) artistDislike.set(k, Math.min(1.6, (artistDislike.get(k) ?? 0) + 0.4));
   }
 
   const recent = history.filter((h, i) => i < RECENT_COUNT || now - h.playedAt < RECENT_WINDOW);
@@ -108,14 +104,17 @@ export function buildProfile({ likes, history, now, dislikes = [] }: RecoSignals
     recentIds: new Set(recent.map((h) => h.track.id)),
     recentKeys: new Set(recent.flatMap((h) => songKeys(h.track))),
     artistScore,
-    artistSkip,
-    skippedIds,
+    artistDislike,
+    freshIds: new Set(fresh.map((l) => l.track.id)),
     blockedIds: new Set(dislikes.map((d) => d.id)),
     blockedKeys: new Set(dislikes.map((d) => d.key)),
   };
 }
 
-/** Seeds: freshest likes, a few random older likes and recently finished plays. */
+/**
+ * Seeds: mostly the last FRESH_LIKES likes (shuffled, so every start differs), a couple of random older likes and
+ * a recently finished play; then the rest of the fresh likes, then everything else.
+ */
 export function pickSeeds({ likes, history }: RecoSignals, count: number, rng: () => number = Math.random): { track: Track; liked: boolean }[] {
   const out: { track: Track; liked: boolean }[] = [];
   const used = new Set<string>();
@@ -124,10 +123,17 @@ export function pickSeeds({ likes, history }: RecoSignals, count: number, rng: (
     used.add(track.id);
     out.push({ track, liked });
   };
-  const sorted = [...likes].sort((a, b) => b.likedAt - a.likedAt);
-  sorted.slice(0, Math.ceil(count / 2)).forEach((l) => add(l.track, true));
-  const older = sorted.slice(Math.ceil(count / 2));
+  const sorted = newestLikes(likes);
+  const fresh = sorted.slice(0, FRESH_LIKES);
+  for (let i = fresh.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [fresh[i], fresh[j]] = [fresh[j], fresh[i]];
+  }
+  fresh.slice(0, Math.ceil(count * 0.75)).forEach((l) => add(l.track, true));
+  const older = sorted.slice(FRESH_LIKES);
   for (let i = 0; i < 2 && older.length; i++) add(older.splice(Math.floor(rng() * older.length), 1)[0].track, true);
+  history.filter((h) => h.completed).slice(0, 1).forEach((h) => add(h.track, false));
+  fresh.forEach((l) => add(l.track, true));
   history.filter((h) => h.completed).slice(0, count).forEach((h) => add(h.track, false));
   sorted.forEach((l) => add(l.track, true));
   return out;
@@ -169,25 +175,26 @@ const MODE_WEIGHTS: Record<WaveMode, { links: number; affinity: number }> = {
 
 export function scoreCandidates(candidates: Candidate[], profile: Profile, mode: WaveMode = 'mix'): Scored[] {
   const w = MODE_WEIGHTS[mode];
-  const byId = new Map<string, { track: Track; links: number; liked: number; bestRank: number }>();
+  const byId = new Map<string, { track: Track; links: number; liked: number; fresh: number; bestRank: number }>();
   for (const c of candidates) {
-    const e = byId.get(c.track.id) ?? { track: c.track, links: 0, liked: 0, bestRank: Infinity };
+    const e = byId.get(c.track.id) ?? { track: c.track, links: 0, liked: 0, fresh: 0, bestRank: Infinity };
     e.links++;
     if (c.seedLiked) e.liked++;
+    if (profile.freshIds.has(c.seedId)) e.fresh++;
     e.bestRank = Math.min(e.bestRank, c.rank);
     byId.set(c.track.id, e);
   }
   return [...byId.values()].map((e) => {
     const k = artistKey(e.track.artist);
     const affinity = Math.log1p(profile.artistScore.get(k) ?? 0);
-    const skip = profile.artistSkip.get(k) ?? 0;
+    const dislike = profile.artistDislike.get(k) ?? 0;
     const score =
       w.links * e.links +
       1.5 * e.liked +
+      1.2 * e.fresh +
       w.affinity * affinity +
       0.6 * Math.max(0, 1 - e.bestRank / 20) -
-      2.5 * skip -
-      (profile.skippedIds.has(e.track.id) ? 3 : 0);
+      2.5 * dislike;
     return { track: e.track, score };
   });
 }
@@ -195,7 +202,7 @@ export function scoreCandidates(candidates: Candidate[], profile: Profile, mode:
 export interface Session {
   seenIds: Set<string>;
   seenKeys: Set<string>;
-  /** Penalty added on skip within this session, by artist key. */
+  /** Penalty added on "Не нравится" within this session, by artist key. */
   artistPenalty: Map<string, number>;
 }
 
@@ -325,10 +332,10 @@ export class Wave {
     return arranged;
   }
 
-  /** Feedback from the player: a like makes the track a seed, a skip penalises its artist for this session. */
-  feedback(kind: 'like' | 'skip' | 'complete', track: Track): void {
+  /** Feedback from the player: a like makes the track a seed, a dislike penalises its artist for this session. */
+  feedback(kind: 'like' | 'dislike' | 'complete', track: Track): void {
     const k = artistKey(track.artist);
-    if (kind === 'skip') {
+    if (kind === 'dislike') {
       this.session.artistPenalty.set(k, (this.session.artistPenalty.get(k) ?? 0) + 1.5);
       return;
     }
@@ -413,8 +420,8 @@ export class Wave {
     if (!this.source.vibes) return;
     const signals = this.signalsCache!;
     const taste = [
-      ...[...signals.likes].sort((a, b) => b.likedAt - a.likedAt).slice(0, 30).map((l) => l.track),
-      ...signals.history.filter((h) => h.completed).slice(0, 15).map((h) => h.track),
+      ...newestLikes(signals.likes).slice(0, FRESH_LIKES).map((l) => l.track),
+      ...signals.history.filter((h) => h.completed).slice(0, 8).map((h) => h.track),
     ];
     const tracks = this.seed ? [this.seed] : this.options.seeds?.length ? this.options.seeds.slice(0, 40) : taste;
     const map = await this.source.vibes(tracks);
